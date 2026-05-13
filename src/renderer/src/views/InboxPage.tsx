@@ -14,9 +14,17 @@ function isoNow(): string {
 	return new Date().toISOString();
 }
 
+const FIND_POLL_MS = 200;
+const FIND_TIMEOUT_MS = 45_000;
+
+const FIND_READY_OR_UNAVAILABLE = ['ready', 'unavailable'] as const;
+
 /**
  * Updates the inviter's `sent` row. Waits until this replica has received that row
  * from the network; otherwise `change` would no-op and Alice would never see accept/decline.
+ *
+ * Uses `allowableStates: ['ready','unavailable']` so `find` does not throw while the repo is
+ * still requesting the document from peers (default `find` rejects immediately on unavailable).
  */
 async function patchInboxSentWhenSynced(
 	repo: Repo,
@@ -24,16 +32,38 @@ async function patchInboxSentWhenSynced(
 	inviteId: string,
 	status: InviteStatus
 ): Promise<void> {
-	const deadline = Date.now() + 30_000;
-	const pollMs = 120;
+	const deadline = Date.now() + FIND_TIMEOUT_MS;
 
 	while (Date.now() < deadline) {
-		const handle = await repo.find<InboxDoc>(inboxUrl);
-		await handle.whenReady();
+		const handle = await repo.find<InboxDoc>(inboxUrl, {
+			allowableStates: [...FIND_READY_OR_UNAVAILABLE]
+		});
+		await handle.whenReady([...FIND_READY_OR_UNAVAILABLE]);
+
 		if (handle.isUnavailable()) {
-			throw new Error('Inviter inbox is unavailable from this device (offline?).');
+			await new Promise<void>((resolve) => {
+				window.setTimeout(resolve, FIND_POLL_MS);
+			});
+			continue;
 		}
-		const doc = handle.doc();
+
+		if (!handle.isReady()) {
+			await new Promise<void>((resolve) => {
+				window.setTimeout(resolve, FIND_POLL_MS);
+			});
+			continue;
+		}
+
+		let doc: InboxDoc;
+		try {
+			doc = handle.doc();
+		} catch {
+			await new Promise<void>((resolve) => {
+				window.setTimeout(resolve, FIND_POLL_MS);
+			});
+			continue;
+		}
+
 		const sent = doc.sent ?? [];
 		const row = sent.find((s) => s.inviteId === inviteId);
 		if (row) {
@@ -50,13 +80,14 @@ async function patchInboxSentWhenSynced(
 			});
 			return;
 		}
+
 		await new Promise<void>((resolve) => {
-			window.setTimeout(resolve, pollMs);
+			window.setTimeout(resolve, FIND_POLL_MS);
 		});
 	}
 
 	throw new Error(
-		'Still waiting for the inviter inbox to sync this invite. Stay on the same network and try again in a few seconds.'
+		'Could not open the inviter inbox from this device. Stay on the same LAN, keep both apps running, and try again—or ask the inviter to resend after you are connected.'
 	);
 }
 

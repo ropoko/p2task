@@ -1,7 +1,30 @@
-import type { Repo } from '@automerge/automerge-repo';
+import type { DocHandle, Repo } from '@automerge/automerge-repo';
 import type { AutomergeUrl } from '@automerge/react';
 
 import type { InboxDoc } from '../../../shared/inboxSchema';
+
+const FIND_POLL_MS = 200;
+const FIND_TIMEOUT_MS = 45_000;
+const FIND_READY_OR_UNAVAILABLE = ['ready', 'unavailable'] as const;
+
+async function waitForInboxHandle(repo: Repo, url: AutomergeUrl): Promise<DocHandle<InboxDoc>> {
+	const deadline = Date.now() + FIND_TIMEOUT_MS;
+	while (Date.now() < deadline) {
+		const handle = await repo.find<InboxDoc>(url, {
+			allowableStates: [...FIND_READY_OR_UNAVAILABLE]
+		});
+		await handle.whenReady([...FIND_READY_OR_UNAVAILABLE]);
+		if (handle.isReady()) {
+			return handle;
+		}
+		await new Promise<void>((resolve) => {
+			window.setTimeout(resolve, FIND_POLL_MS);
+		});
+	}
+	throw new Error(
+		'Could not reach that inbox document yet. Confirm both peers are on the same LAN and try again.'
+	);
+}
 
 export async function invitePeerToWorkspaces(opts: {
 	repo: Repo;
@@ -17,17 +40,9 @@ export async function invitePeerToWorkspaces(opts: {
 	const now = new Date().toISOString();
 	const inviterSentInviteId = inviteId;
 
-	const targetHandle = await opts.repo.find<InboxDoc>(opts.targetInboxUrl);
-	await targetHandle.whenReady();
-	if (targetHandle.isUnavailable()) {
-		throw new Error('Could not open the peer inbox document (offline or invalid URL).');
-	}
+	const targetHandle = await waitForInboxHandle(opts.repo, opts.targetInboxUrl);
 
-	const selfHandle = await opts.repo.find<InboxDoc>(opts.myInboxUrl);
-	await selfHandle.whenReady();
-	if (selfHandle.isUnavailable()) {
-		throw new Error('Local inbox document is unavailable.');
-	}
+	const selfHandle = await waitForInboxHandle(opts.repo, opts.myInboxUrl);
 
 	selfHandle.change((d) => {
 		if (!Array.isArray(d.sent)) {
