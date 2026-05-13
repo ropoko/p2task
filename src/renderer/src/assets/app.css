@@ -188,6 +188,7 @@ textarea {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	min-height: 0;
 	padding: 20px 24px 24px;
 }
 
@@ -518,4 +519,328 @@ textarea {
 .btn-text-outline:hover {
 	border-color: var(--color-border-strong);
 	background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar__label--spaced {
+	padding-top: 16px;
+}
+
+.sidebar__nav--scroll {
+	flex: 0 1 auto;
+	max-height: 42vh;
+	overflow-y: auto;
+	margin-bottom: 8px;
+}
+
+.sidebar__link--subtle {
+	color: var(--color-text-dim);
+	font-size: 13px;
+}
+
+.main__header--stack {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 16px;
+	margin-bottom: 20px;
+}
+
+.main__header-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.main__workspace-name {
+	margin: 0;
+	font-size: 26px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	color: var(--color-text);
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	padding: 4px 8px;
+	background: transparent;
+	min-width: 0;
+	flex: 1;
+	max-width: min(100%, 480px);
+}
+
+.main__workspace-name:hover,
+.main__workspace-name:focus {
+	border-color: var(--color-border);
+	outline: none;
+}
+
+.main__tabs {
+	display: flex;
+	gap: 4px;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.main__tab {
+	padding: 10px 16px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	font-weight: 500;
+	font-size: 14px;
+	color: var(--color-text-muted);
+	border-bottom: 2px solid transparent;
+	margin-bottom: -1px;
+}
+
+.main__tab:hover {
+	color: var(--color-text);
+}
+
+.main__tab[aria-selected='true'] {
+	color: var(--color-text);
+	border-bottom-color: var(--color-accent);
+}
+
+.main__subtitle {
+	margin: 0;
+	font-size: 14px;
+	color: var(--color-text-muted);
+}
+
+.main__empty {
+	margin: 0;
+	font-size: 14px;
+	color: var(--color-text-muted);
+}
+
+.kanban {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	gap: 14px;
+	overflow-x: auto;
+	align-items: flex-start;
+	padding-bottom: 8px;
+}
+
+.kanban__column {
+	flex: 0 0 280px;
+	min-width: 260px;
+	display: flex;
+	flex-direction: column;
+	max-height: 100%;
+	background: var(--color-bg-elevated);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	padding: 12px;
+}
+
+.kanban__column-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.kanban__column-title-input {
+	flex: 1;
+	min-width: 0;
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--color-text-muted);
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	padding: 6px 8px;
+	background: transparent;
+}
+
+.kanban__column-title-input:hover,
+.kanban__column-title-input:focus {
+	border-color: var(--color-border);
+	outline: none;
+	color: var(--color-text);
+}
+
+.kanban__icon-btn {
+	flex-shrink: 0;
+	width: 28px;
+	height: 28px;
+	border: none;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 18px;
+	line-height: 1;
+}
+
+.kanban__icon-btn:hover {
+	color: var(--color-text);
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.kanban__tasks {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	overflow-y: auto;
+	flex: 1;
+	min-height: 80px;
+	max-height: 52vh;
+}
+
+.kanban__task-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-main);
+}
+
+.kanban__task-title-input {
+	width: 100%;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	padding: 6px 8px;
+	font-size: 14px;
+	font-weight: 500;
+	background: transparent;
+	color: var(--color-text);
+}
+
+.kanban__task-title-input:hover,
+.kanban__task-title-input:focus {
+	border-color: var(--color-border);
+	outline: none;
+}
+
+.kanban__task-move {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.kanban__task-move-label {
+	font-size: 11px;
+	color: var(--color-text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.kanban__select {
+	font-size: 12px;
+	padding: 6px 8px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-elevated);
+	color: var(--color-text);
+	cursor: pointer;
+	user-select: text;
+}
+
+.kanban__add-task {
+	margin-top: 10px;
+	padding: 8px 10px;
+	border-radius: var(--radius-sm);
+	border: 1px dashed var(--color-border);
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.kanban__add-task:hover {
+	border-color: var(--color-border-strong);
+	color: var(--color-text);
+}
+
+.kanban__add-column {
+	flex: 0 0 auto;
+	align-self: flex-start;
+	padding: 12px 16px;
+	border-radius: var(--radius-md);
+	border: 1px dashed var(--color-border);
+	background: transparent;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.kanban__add-column:hover {
+	border-color: var(--color-border-strong);
+	color: var(--color-text);
+}
+
+.notes-page {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	gap: 20px;
+}
+
+.notes-page__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
+}
+
+.notes-page__entry {
+	padding: 14px 16px;
+	border-radius: var(--radius-md);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-elevated);
+}
+
+.notes-page__time {
+	display: block;
+	font-size: 11px;
+	color: var(--color-text-muted);
+	margin-bottom: 8px;
+}
+
+.notes-page__text {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	user-select: text;
+}
+
+.notes-page__composer {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.notes-page__label {
+	font-size: 12px;
+	color: var(--color-text-muted);
+}
+
+.notes-page__textarea {
+	width: 100%;
+	min-height: 100px;
+	padding: 12px 14px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-elevated);
+	resize: vertical;
+}
+
+.notes-page__composer-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
 }

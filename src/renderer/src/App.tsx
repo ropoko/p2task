@@ -1,153 +1,246 @@
-import { useState } from 'react';
+import { useDocument, type AutomergeUrl } from '@automerge/react';
+import { useMemo, useState } from 'react';
 
-import { FocusPage } from './views/FocusPage';
+import { AppSidebar, type AppRoute } from './components/AppSidebar';
 import { IconSquare } from './components/IconSquare';
+import { FocusPage } from './views/FocusPage';
+import { MyTasksPage } from './views/MyTasksPage';
+import { WorkspaceKanbanPage } from './views/WorkspaceKanbanPage';
+import { WorkspaceNotesPage } from './views/WorkspaceNotesPage';
+import { createDefaultWorkspace, type RootDoc } from './workspace/workspaceDoc';
+import {
+	backlogTasks,
+	defaultFocusTask,
+	doneColumnId,
+	getWorkspaceById,
+	isListedTask,
+	todayTasks,
+	workspacesInDoc
+} from './workspace/workspaceSelectors';
+
+export type AppProps = {
+	workspaceDocumentUrl: AutomergeUrl;
+};
 
 type AppView = 'normal' | 'focus';
 
-function TaskIconCircle(): React.JSX.Element {
-	return (
-		<span className="task-card__icon-wrap" aria-hidden>
-			<svg
-				width="18"
-				height="18"
-				viewBox="0 0 18 18"
-				fill="none"
-				xmlns="http://www.w3.org/2000/svg"
-			>
-				<circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.2" opacity="0.45" />
-			</svg>
-		</span>
+export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Element {
+	const [doc, changeDoc] = useDocument<RootDoc>(workspaceDocumentUrl, { suspense: true });
+	const [route, setRoute] = useState<AppRoute>('workspace');
+	const [workspaceTab, setWorkspaceTab] = useState<'kanban' | 'notes'>('kanban');
+	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(
+		() => workspacesInDoc(doc)[0]?.id ?? ''
 	);
-}
-
-function TaskIconSquareFilled(): React.JSX.Element {
-	return (
-		<span className="task-card__icon-wrap" aria-hidden>
-			<svg
-				width="18"
-				height="18"
-				viewBox="0 0 18 18"
-				fill="none"
-				xmlns="http://www.w3.org/2000/svg"
-			>
-				<rect x="4" y="4" width="10" height="10" rx="2" fill="currentColor" />
-			</svg>
-		</span>
-	);
-}
-
-export default function App(): React.JSX.Element {
 	const [view, setView] = useState<AppView>('normal');
+	const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+
+	const resolvedWorkspaceId = useMemo(() => {
+		if (getWorkspaceById(doc, selectedWorkspaceId)) {
+			return selectedWorkspaceId;
+		}
+		return workspacesInDoc(doc)[0]?.id ?? '';
+	}, [doc, selectedWorkspaceId]);
+
+	const activeWorkspace = getWorkspaceById(doc, resolvedWorkspaceId);
 
 	const goNormal = (): void => setView('normal');
 	const goFocus = (): void => setView('focus');
+
+	const today = useMemo(
+		() => (resolvedWorkspaceId ? todayTasks(doc, resolvedWorkspaceId) : []),
+		[doc, resolvedWorkspaceId]
+	);
+	const backlog = useMemo(
+		() => (resolvedWorkspaceId ? backlogTasks(doc, resolvedWorkspaceId) : []),
+		[doc, resolvedWorkspaceId]
+	);
+
+	const resolvedFocus = useMemo(() => {
+		if (!resolvedWorkspaceId) {
+			return undefined;
+		}
+		const ws = getWorkspaceById(doc, resolvedWorkspaceId);
+		if (!ws) {
+			return undefined;
+		}
+		if (focusTaskId) {
+			const hit = ws.tasks.find((t) => t.id === focusTaskId && isListedTask(t, ws));
+			if (hit) {
+				return hit;
+			}
+		}
+		return defaultFocusTask(doc, resolvedWorkspaceId);
+	}, [doc, focusTaskId, resolvedWorkspaceId]);
+
+	const focusIndex = resolvedFocus ? today.findIndex((t) => t.id === resolvedFocus.id) + 1 : 0;
+	const focusLabel =
+		today.length > 0 && focusIndex > 0 ? `${focusIndex} of ${today.length} today` : '0 of 0 today';
+
+	const markFocusTaskDone = (): void => {
+		if (!resolvedFocus || !resolvedWorkspaceId) {
+			return;
+		}
+		changeDoc((d) => {
+			const list = d.workspaces;
+			if (!Array.isArray(list)) {
+				return;
+			}
+			const ws = list.find((w) => w.id === resolvedWorkspaceId);
+			if (!ws) {
+				return;
+			}
+			const doneId = doneColumnId(ws);
+			if (!doneId) {
+				return;
+			}
+			const t = ws.tasks.find((x) => x.id === resolvedFocus.id);
+			if (!t) {
+				return;
+			}
+			t.columnId = doneId;
+			t.selectedForToday = false;
+		});
+		goNormal();
+	};
+
+	const addWorkspace = (): void => {
+		const nw = createDefaultWorkspace('Untitled');
+		changeDoc((d) => {
+			if (!Array.isArray(d.workspaces)) {
+				d.workspaces = [nw];
+				return;
+			}
+			d.workspaces.push(nw);
+		});
+		setSelectedWorkspaceId(nw.id);
+		setRoute('workspace');
+		setWorkspaceTab('kanban');
+	};
+
+	const renameWorkspace = (name: string): void => {
+		if (!resolvedWorkspaceId) {
+			return;
+		}
+		changeDoc((d) => {
+			const list = d.workspaces;
+			if (!Array.isArray(list)) {
+				return;
+			}
+			const w = list.find((x) => x.id === resolvedWorkspaceId);
+			if (w) {
+				w.name = name;
+			}
+		});
+	};
+
+	const renderMain = (): React.JSX.Element => {
+		if (!activeWorkspace) {
+			return (
+				<main className="main">
+					<p className="main__empty">No workspace available.</p>
+				</main>
+			);
+		}
+
+		if (route === 'myTasks') {
+			return (
+				<main className="main">
+					<MyTasksPage
+						workspace={activeWorkspace}
+						today={today}
+						backlog={backlog}
+						resolvedFocus={resolvedFocus}
+						onSelectFocusTask={setFocusTaskId}
+						onOpenFocus={goFocus}
+					/>
+				</main>
+			);
+		}
+
+		if (route === 'activity' || route === 'inbox') {
+			return (
+				<main className="main">
+					<header className="main__header">
+						<h1 className="main__title">{route === 'activity' ? 'Activity' : 'Inbox'}</h1>
+						<p className="main__subtitle">Filtered by workspace: {activeWorkspace.name}</p>
+					</header>
+					<p className="main__empty">Nothing here yet.</p>
+				</main>
+			);
+		}
+
+		return (
+			<main className="main">
+				<header className="main__header main__header--stack">
+					<div className="main__header-row">
+						<input
+							className="main__workspace-name"
+							type="text"
+							value={activeWorkspace.name}
+							aria-label="Workspace name"
+							onChange={(e) => renameWorkspace(e.target.value)}
+						/>
+						<div className="main__actions">
+							<button type="button" className="btn-ghost" onClick={goFocus}>
+								<IconSquare />
+								Focus mode
+							</button>
+						</div>
+					</div>
+					<div className="main__tabs" role="tablist" aria-label="Workspace">
+						<button
+							type="button"
+							className="main__tab"
+							role="tab"
+							aria-selected={workspaceTab === 'kanban'}
+							onClick={() => setWorkspaceTab('kanban')}
+						>
+							Kanban
+						</button>
+						<button
+							type="button"
+							className="main__tab"
+							role="tab"
+							aria-selected={workspaceTab === 'notes'}
+							onClick={() => setWorkspaceTab('notes')}
+						>
+							Notes
+						</button>
+					</div>
+				</header>
+				{workspaceTab === 'kanban' ? (
+					<WorkspaceKanbanPage workspaceId={resolvedWorkspaceId} doc={doc} changeDoc={changeDoc} />
+				) : (
+					<WorkspaceNotesPage workspaceId={resolvedWorkspaceId} doc={doc} changeDoc={changeDoc} />
+				)}
+			</main>
+		);
+	};
 
 	return (
 		<div className="app-root" data-view={view}>
 			<div className="app-chrome" aria-hidden={view === 'focus'}>
 				<div className="app-body">
-					<aside className="sidebar" aria-label="Workspace">
-						<div className="sidebar__label">workspace</div>
-						<nav className="sidebar__nav" aria-label="Primary">
-							<button type="button" className="sidebar__link" data-active="false">
-								<IconSquare />
-								Kanban
-							</button>
-							<button type="button" className="sidebar__link" data-active="true">
-								<IconSquare />
-								My tasks
-							</button>
-							<button type="button" className="sidebar__link" data-active="false">
-								<IconSquare />
-								Activity
-							</button>
-							<button type="button" className="sidebar__link" data-active="false">
-								<IconSquare />
-								Inbox
-							</button>
-						</nav>
-						<div className="sidebar__footer">
-							<div className="sidebar__avatar" aria-hidden>
-								AL
-							</div>
-							<span className="sidebar__user-name">Ana Lima</span>
-						</div>
-					</aside>
-
-					<main className="main">
-						<header className="main__header">
-							<h1 className="main__title">My tasks — today</h1>
-							<div className="main__actions">
-								<button type="button" className="btn-ghost">
-									<IconSquare />
-									Go offline
-								</button>
-								<button type="button" className="btn-ghost" onClick={goFocus}>
-									<IconSquare />
-									Focus mode
-								</button>
-							</div>
-						</header>
-
-						<section className="task-section" aria-labelledby="today-heading">
-							<h2 className="task-section__label" id="today-heading">
-								Selected for today
-							</h2>
-							<div className="task-list">
-								<article className="task-card task-card--active">
-									<TaskIconSquareFilled />
-									<div className="task-card__body">
-										<h3 className="task-card__title">Write the API authentication spec</h3>
-										<p className="task-card__meta">Design · M · selected for today</p>
-									</div>
-									<span className="task-card__badge task-card__badge--progress">in progress</span>
-								</article>
-								<article className="task-card">
-									<TaskIconCircle />
-									<div className="task-card__body">
-										<h3 className="task-card__title">Ship dark mode QA checklist</h3>
-										<p className="task-card__meta">Engineering · S</p>
-									</div>
-									<span className="task-card__badge task-card__badge--todo">todo</span>
-								</article>
-								<article className="task-card">
-									<TaskIconCircle />
-									<div className="task-card__body">
-										<h3 className="task-card__title">Prep stakeholder demo</h3>
-										<p className="task-card__meta">Product · L</p>
-									</div>
-									<span className="task-card__badge task-card__badge--todo">todo</span>
-								</article>
-							</div>
-						</section>
-
-						<section className="task-section" aria-labelledby="backlog-heading">
-							<h2 className="task-section__label" id="backlog-heading">
-								Backlog
-							</h2>
-							<div className="task-list">
-								<article className="task-card task-card--backlog">
-									<TaskIconCircle />
-									<div className="task-card__body">
-										<h3 className="task-card__title">Refine onboarding metrics</h3>
-										<p className="task-card__meta">Product · aged 18 days</p>
-									</div>
-								</article>
-								<article className="task-card task-card--backlog">
-									<TaskIconCircle />
-									<div className="task-card__body">
-										<h3 className="task-card__title">Draft support macros v2</h3>
-										<p className="task-card__meta">Ops · aged 26 days</p>
-									</div>
-								</article>
-							</div>
-						</section>
-					</main>
+					<AppSidebar
+						workspaces={workspacesInDoc(doc)}
+						selectedWorkspaceId={resolvedWorkspaceId}
+						route={route}
+						onSelectWorkspace={setSelectedWorkspaceId}
+						onAddWorkspace={addWorkspace}
+						onNavigate={setRoute}
+					/>
+					{renderMain()}
 				</div>
 			</div>
 
-			<FocusPage active={view === 'focus'} onExit={goNormal} />
+			<FocusPage
+				active={view === 'focus'}
+				onExit={goNormal}
+				focusSummary={focusLabel}
+				taskTitle={resolvedFocus?.title ?? 'No task selected'}
+				intention={resolvedFocus?.intention ?? ''}
+				onMarkDone={markFocusTaskDone}
+			/>
 		</div>
 	);
 }

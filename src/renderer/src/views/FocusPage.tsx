@@ -3,9 +3,21 @@ import { IconSquare } from '@renderer/components/IconSquare';
 export type FocusPageProps = {
 	active: boolean;
 	onExit: () => void;
+	/** e.g. "1 of 3 today" */
+	focusSummary: string;
+	taskTitle: string;
+	intention: string;
+	onMarkDone: () => void;
 };
 
-export function FocusPage({ active, onExit }: FocusPageProps): React.JSX.Element {
+export function FocusPage({
+	active,
+	onExit,
+	focusSummary,
+	taskTitle,
+	intention,
+	onMarkDone
+}: FocusPageProps): React.JSX.Element {
 	return (
 		<div className="focus-page" role="region" aria-hidden={!active} aria-label="Focus mode">
 			<header className="focus-page__header">
@@ -22,13 +34,10 @@ export function FocusPage({ active, onExit }: FocusPageProps): React.JSX.Element
 			<div className="focus-page__body">
 				<div className="focus-page__inner">
 					<div className="focus-page__progress">
-						<span className="focus-badge">1 of 3 today</span>
+						<span className="focus-badge">{focusSummary}</span>
 					</div>
-					<h1 className="focus-page__title">Write the API authentication spec</h1>
-					<p className="focus-page__intention">
-						Done means: document covers keypair flow, token anatomy, and revocation. Ready for
-						engineering review.
-					</p>
+					<h1 className="focus-page__title">{taskTitle}</h1>
+					{intention ? <p className="focus-page__intention">{intention}</p> : null}
 
 					<div className="focus-timer">
 						<div className="focus-timer__ring" aria-label="Session timer">
@@ -61,7 +70,7 @@ export function FocusPage({ active, onExit }: FocusPageProps): React.JSX.Element
 			</div>
 
 			<footer className="focus-page__footer">
-				<button type="button" className="btn-ghost">
+				<button type="button" className="btn-ghost" onClick={onMarkDone}>
 					<IconSquare />
 					Mark done
 				</button>
