@@ -13,6 +13,7 @@ export type {
 	NoteEntry,
 	RootDoc,
 	TaskSize,
+	WorkspaceAccessRevocation,
 	WorkspaceEntity,
 	WorkspaceNotes,
 	WorkspaceTask

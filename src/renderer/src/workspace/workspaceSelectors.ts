@@ -1,4 +1,10 @@
-import type { AcceptedShare, RootDoc, WorkspaceEntity, WorkspaceTask } from './workspaceDoc';
+import type {
+	AcceptedShare,
+	RootDoc,
+	WorkspaceAccessRevocation,
+	WorkspaceEntity,
+	WorkspaceTask
+} from './workspaceDoc';
 
 export function workspacesInDoc(doc: RootDoc): WorkspaceEntity[] {
 	return doc.workspaces ?? [];
@@ -6,6 +12,20 @@ export function workspacesInDoc(doc: RootDoc): WorkspaceEntity[] {
 
 export function acceptedSharesInDoc(doc: RootDoc): AcceptedShare[] {
 	return doc.acceptedShares ?? [];
+}
+
+export function workspaceAccessRevocationsInDoc(doc: RootDoc): WorkspaceAccessRevocation[] {
+	return doc.workspaceAccessRevocations ?? [];
+}
+
+export function isWorkspaceRevokedForPeer(
+	doc: RootDoc,
+	workspaceId: string,
+	peerId: string
+): boolean {
+	return workspaceAccessRevocationsInDoc(doc).some(
+		(r) => r.workspaceId === workspaceId && r.peerId === peerId
+	);
 }
 
 export function getWorkspaceById(doc: RootDoc, workspaceId: string): WorkspaceEntity | undefined {

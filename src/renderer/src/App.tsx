@@ -10,6 +10,10 @@ import {
 import { IconSquare } from './components/IconSquare';
 import { InviteToWorkspacesDialog } from './components/InviteToWorkspacesDialog';
 import { ShareDocSync, type ShareDocBundle } from './components/ShareDocSync';
+import {
+	SharedWorkspacePeersRail,
+	type SharedWorkspacePeerRow
+} from './components/SharedWorkspacePeersRail';
 import { useAppIdentity } from './identity/identityContext';
 import { FocusPage } from './views/FocusPage';
 import { InboxPage } from './views/InboxPage';
@@ -18,7 +22,13 @@ import { PeersPage } from './views/PeersPage';
 import { WorkspaceKanbanPage } from './views/WorkspaceKanbanPage';
 import { WorkspaceNotesPage } from './views/WorkspaceNotesPage';
 import { invitePeerToWorkspaces } from './workspace/invitePeer';
-import { createDefaultWorkspace, type PeerProfileDoc, type RootDoc } from './workspace/workspaceDoc';
+import {
+	AcceptedShare,
+	createDefaultWorkspace,
+	DEFAULT_CREATED_BY,
+	type PeerProfileDoc,
+	type RootDoc
+} from './workspace/workspaceDoc';
 import {
 	makeLocalWorkspaceKey,
 	makeSharedWorkspaceKey,
@@ -31,9 +41,17 @@ import {
 	doneColumnId,
 	getWorkspaceById,
 	isListedTask,
+	isWorkspaceRevokedForPeer,
 	todayTasks,
 	workspacesInDoc
 } from './workspace/workspaceSelectors';
+
+function isWorkspaceContributorId(createdBy: string | undefined): boolean {
+	if (!createdBy || createdBy === DEFAULT_CREATED_BY || createdBy === 'local') {
+		return false;
+	}
+	return true;
+}
 
 export type AppProps = {
 	workspaceDocumentUrl: AutomergeUrl;
@@ -97,6 +115,52 @@ export default function App({
 	}, []);
 
 	const acceptedShares = acceptedSharesInDoc(localDoc);
+
+	useEffect(() => {
+		const shares = acceptedSharesInDoc(localDoc);
+		const mutations: { shareId: string; kept: string[] | null }[] = [];
+
+		for (const r of shares) {
+			const bundle = shareDocMap.get(r.shareRootUrl as AutomergeUrl);
+			if (!bundle) {
+				continue;
+			}
+			const hostDoc = bundle.doc;
+			const kept = r.workspaceIds.filter(
+				(wid) => !isWorkspaceRevokedForPeer(hostDoc, wid, createdByUserId)
+			);
+			if (kept.length === r.workspaceIds.length) {
+				continue;
+			}
+			mutations.push({ shareId: r.id, kept: kept.length === 0 ? null : kept });
+		}
+
+		if (mutations.length === 0) {
+			return;
+		}
+
+		changeLocalDoc((d) => {
+			const arr = d.acceptedShares;
+			if (!Array.isArray(arr)) {
+				return;
+			}
+			for (const m of mutations) {
+				const r = arr.find((s) => s.id === m.shareId);
+				if (!r) {
+					continue;
+				}
+				if (m.kept === null) {
+					const idx = arr.indexOf(r);
+					if (idx >= 0) {
+						arr.splice(idx, 1);
+					}
+				} else {
+					r.workspaceIds.splice(0, r.workspaceIds.length, ...m.kept);
+				}
+			}
+		});
+	}, [localDoc, shareDocMap, createdByUserId, changeLocalDoc]);
+
 	const distinctShareRootUrls = useMemo(
 		() => [...new Set(acceptedShares.map((s) => s.shareRootUrl))] as AutomergeUrl[],
 		[acceptedShares]
@@ -118,6 +182,9 @@ export default function App({
 			}
 			const doc = bundle.doc;
 			for (const wid of share.workspaceIds) {
+				if (isWorkspaceRevokedForPeer(doc, wid, createdByUserId)) {
+					continue;
+				}
 				const ws = workspacesInDoc(doc).find((x) => x.id === wid);
 				if (ws) {
 					const hostSnapshot =
@@ -135,7 +202,7 @@ export default function App({
 			}
 		}
 		return items;
-	}, [acceptedShares, shareDocMap]);
+	}, [acceptedShares, shareDocMap, createdByUserId]);
 
 	const sidebarWorkspaceKeys = useMemo(
 		() => [...sidebarLocalWorkspaces, ...sidebarSharedWorkspaces],
@@ -155,6 +222,19 @@ export default function App({
 		() => parseWorkspaceKey(resolvedWorkspaceKey),
 		[resolvedWorkspaceKey]
 	);
+
+	const activeShareForWorkspace = useMemo((): AcceptedShare | null => {
+		if (activeParsed?.kind !== 'share') {
+			return null;
+		}
+		return (
+			acceptedShares.find(
+				(s) =>
+					s.shareRootUrl === activeParsed.shareRootUrl &&
+					s.workspaceIds.includes(activeParsed.workspaceId)
+			) ?? null
+		);
+	}, [activeParsed, acceptedShares]);
 
 	const { activeDoc, changeActiveDoc } = useMemo(() => {
 		const p = activeParsed;
@@ -181,6 +261,159 @@ export default function App({
 	const [view, setView] = useState<AppView>('normal');
 	const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 	const [inviteDraft, setInviteDraft] = useState<InviteDraft | null>(null);
+
+	const workspacePeersRailRows = useMemo((): SharedWorkspacePeerRow[] => {
+		if (!activeWorkspace || !activeParsed) {
+			return [];
+		}
+		const snapshotForUnknownPeer = (peerId: string): string => {
+			if (peerId.length > 10) {
+				return `${peerId.slice(0, 8)}…${peerId.slice(-4)}`;
+			}
+			return peerId;
+		};
+		if (activeParsed.kind === 'local') {
+			const ids = new Set<string>();
+			ids.add(createdByUserId);
+			for (const t of activeWorkspace.tasks) {
+				if (isWorkspaceContributorId(t.created_by)) {
+					ids.add(t.created_by);
+				}
+			}
+			for (const e of activeWorkspace.notes?.entries ?? []) {
+				if (isWorkspaceContributorId(e.created_by)) {
+					ids.add(e.created_by);
+				}
+			}
+			const sorted = [...ids].sort((a, b) => {
+				if (a === createdByUserId) {
+					return -1;
+				}
+				if (b === createdByUserId) {
+					return 1;
+				}
+				return a.localeCompare(b);
+			});
+			const visible = sorted.filter(
+				(peerId) => !isWorkspaceRevokedForPeer(localDoc, activeWorkspaceId, peerId)
+			);
+			return visible.map((peerId) => ({
+				peerId,
+				snapshotLabel:
+					peerId === createdByUserId
+						? nickname.trim() || 'You'
+						: snapshotForUnknownPeer(peerId),
+				badge: peerId === createdByUserId ? 'you' : null,
+				canRemove: peerId !== createdByUserId
+			}));
+		}
+		if (activeParsed.kind !== 'share' || !activeShareForWorkspace) {
+			return [];
+		}
+		const share = activeShareForWorkspace;
+		const ids = new Set<string>();
+		ids.add(share.fromPeerId);
+		ids.add(createdByUserId);
+		for (const t of activeWorkspace.tasks) {
+			if (isWorkspaceContributorId(t.created_by)) {
+				ids.add(t.created_by);
+			}
+		}
+		for (const e of activeWorkspace.notes?.entries ?? []) {
+			if (isWorkspaceContributorId(e.created_by)) {
+				ids.add(e.created_by);
+			}
+		}
+		const snapshotForPeer = (peerId: string): string => {
+			if (peerId === share.fromPeerId) {
+				return (
+					share.fromNickname?.trim() ||
+					(share.fromPeerId.length > 10 ? `${share.fromPeerId.slice(0, 8)}…` : share.fromPeerId)
+				);
+			}
+			if (peerId === createdByUserId) {
+				return nickname.trim() || 'You';
+			}
+			return snapshotForUnknownPeer(peerId);
+		};
+		const rank = (id: string): number => {
+			if (id === share.fromPeerId) {
+				return 0;
+			}
+			if (id === createdByUserId) {
+				return 1;
+			}
+			return 2;
+		};
+		const sorted = [...ids].sort((a, b) => {
+			const ra = rank(a);
+			const rb = rank(b);
+			if (ra !== rb) {
+				return ra - rb;
+			}
+			return a.localeCompare(b);
+		});
+		const visible = sorted.filter(
+			(peerId) => !isWorkspaceRevokedForPeer(activeDoc, activeWorkspaceId, peerId)
+		);
+		return visible.map((peerId) => ({
+			peerId,
+			snapshotLabel: snapshotForPeer(peerId),
+			badge:
+				peerId === share.fromPeerId ? 'owner' : peerId === createdByUserId ? 'you' : null
+		}));
+	}, [
+		activeParsed,
+		activeWorkspace,
+		activeWorkspaceId,
+		activeDoc,
+		activeShareForWorkspace,
+		createdByUserId,
+		localDoc,
+		nickname
+	]);
+
+	const revokePeerFromWorkspace = useCallback(
+		(peerId: string) => {
+			if (activeParsed?.kind !== 'local' || !activeWorkspaceId) {
+				return;
+			}
+			if (peerId === createdByUserId) {
+				return;
+			}
+			if (isWorkspaceRevokedForPeer(localDoc, activeWorkspaceId, peerId)) {
+				return;
+			}
+			const ws = getWorkspaceById(localDoc, activeWorkspaceId);
+			const name = ws?.name ?? 'this workspace';
+			if (!window.confirm(`Remove this peer from "${name}"? They will lose access after sync.`)) {
+				return;
+			}
+			changeLocalDoc((d) => {
+				if (!Array.isArray(d.workspaceAccessRevocations)) {
+					d.workspaceAccessRevocations = [];
+				}
+				const dup = d.workspaceAccessRevocations.some(
+					(r) => r.workspaceId === activeWorkspaceId && r.peerId === peerId
+				);
+				if (dup) {
+					return;
+				}
+				d.workspaceAccessRevocations.push({
+					workspaceId: activeWorkspaceId,
+					peerId,
+					revokedAt: new Date().toISOString()
+				});
+			});
+		},
+		[activeParsed?.kind, activeWorkspaceId, changeLocalDoc, createdByUserId, localDoc]
+	);
+
+	const showWorkspacePeersRail =
+		route === 'workspace' &&
+		activeWorkspace !== undefined &&
+		(activeParsed?.kind === 'local' ||
+			(activeParsed?.kind === 'share' && activeShareForWorkspace !== null));
 
 	const today = useMemo(
 		() => (activeWorkspaceId ? todayTasks(activeDoc, activeWorkspaceId) : []),
@@ -444,7 +677,14 @@ export default function App({
 						onNavigate={setRoute}
 						onAfterProfileSave={persistAutomergeProfile}
 					/>
-					{renderMain()}
+					<div className="app-body__center">{renderMain()}</div>
+					{showWorkspacePeersRail ? (
+						<SharedWorkspacePeersRail
+							rows={workspacePeersRailRows}
+							knownPeersDocumentUrl={knownPeersDocumentUrl}
+							onRemovePeer={activeParsed?.kind === 'local' ? revokePeerFromWorkspace : undefined}
+						/>
+					) : null}
 				</div>
 			</div>
 

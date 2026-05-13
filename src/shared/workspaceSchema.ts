@@ -55,10 +55,18 @@ export type AcceptedShare = {
 	acceptedAt: string;
 };
 
+/** Host-authored: peer loses in-app access to this workspace on this root doc (synced to replicas). */
+export type WorkspaceAccessRevocation = {
+	workspaceId: string;
+	peerId: string;
+	revokedAt: string;
+};
+
 /** Root Automerge document: all workspaces in one doc. */
 export type RootDoc = {
 	workspaces: WorkspaceEntity[];
 	acceptedShares?: AcceptedShare[];
+	workspaceAccessRevocations?: WorkspaceAccessRevocation[];
 };
 
 /** Until app identity is wired into task creation; used as a default created_by. */
