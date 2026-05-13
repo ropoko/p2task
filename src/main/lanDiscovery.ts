@@ -12,7 +12,7 @@ const SERVICE_VERSION = '1';
 type Discovered = {
 	peerId: string;
 	url: string;
-	adapter: WebSocketClientAdapter;
+	adapter: WebSocketClientAdapter | null;
 };
 
 let bonjour: Bonjour | null = null;
@@ -20,12 +20,34 @@ let browser: Browser | null = null;
 let publishedService: Service | null = null;
 const discoveredPeers = new Map<string, Discovered>();
 
-function pickIpv4Address(addresses: string[] | undefined): string | null {
-	if (!addresses || addresses.length === 0) {
-		return null;
+function isIpv4Address(address: string | undefined): address is string {
+	return typeof address === 'string' && /^\d{1,3}(\.\d{1,3}){3}$/.test(address);
+}
+
+function isIpv6Address(address: string | undefined): address is string {
+	return typeof address === 'string' && address.includes(':');
+}
+
+function websocketHost(host: string): string {
+	return isIpv6Address(host) ? `[${host}]` : host;
+}
+
+function pickReachableHost(service: Service): string | null {
+	const ipv4 = service.addresses?.find(isIpv4Address);
+	if (ipv4) {
+		return ipv4;
 	}
-	const ipv4 = addresses.find((a) => /^\d{1,3}(\.\d{1,3}){3}$/.test(a));
-	return ipv4 ?? null;
+	if (isIpv4Address(service.referer?.address)) {
+		return service.referer.address;
+	}
+	if (typeof service.host === 'string' && service.host.length > 0) {
+		return service.host;
+	}
+	const firstAddress = service.addresses?.[0];
+	if (firstAddress) {
+		return firstAddress;
+	}
+	return null;
 }
 
 function txtPeerId(txt: unknown): string | null {
@@ -33,7 +55,14 @@ function txtPeerId(txt: unknown): string | null {
 		return null;
 	}
 	const value = (txt as { peerId?: unknown }).peerId;
-	return typeof value === 'string' && value.length > 0 ? value : null;
+	if (typeof value === 'string' && value.length > 0) {
+		return value;
+	}
+	if (Buffer.isBuffer(value)) {
+		const decoded = value.toString('utf8');
+		return decoded.length > 0 ? decoded : null;
+	}
+	return null;
 }
 
 function shouldInitiateTo(remotePeerId: string, localPeerId: string): boolean {
@@ -51,16 +80,24 @@ function handleServiceUp(service: Service): void {
 	if (discoveredPeers.has(remotePeerId)) {
 		return;
 	}
-	if (!shouldInitiateTo(remotePeerId, localPeerId)) {
-		return;
-	}
 
-	const host = pickIpv4Address(service.addresses);
+	const host = pickReachableHost(service);
 	if (!host) {
+		console.warn('Discovered LAN peer without a reachable host', {
+			peerId: remotePeerId,
+			host: service.host,
+			addresses: service.addresses,
+			referer: service.referer
+		});
 		return;
 	}
 
-	const url = `ws://${host}:${service.port}`;
+	const url = `ws://${websocketHost(host)}:${service.port}`;
+	if (!shouldInitiateTo(remotePeerId, localPeerId)) {
+		discoveredPeers.set(remotePeerId, { peerId: remotePeerId, url, adapter: null });
+		return;
+	}
+
 	const adapter = new WebSocketClientAdapter(url);
 	trackAdapterPeers(adapter, 'lan-out', url);
 	repo.networkSubsystem.addNetworkAdapter(adapter);
@@ -142,6 +179,9 @@ export function stopLanDiscovery(): void {
 	}
 	const repo = getRepo();
 	for (const { adapter } of discoveredPeers.values()) {
+		if (!adapter) {
+			continue;
+		}
 		untrackAdapterPeers(adapter);
 		try {
 			repo.networkSubsystem.removeNetworkAdapter(adapter);
