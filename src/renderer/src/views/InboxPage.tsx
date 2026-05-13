@@ -14,27 +14,50 @@ function isoNow(): string {
 	return new Date().toISOString();
 }
 
-async function patchInboxSent(
+/**
+ * Updates the inviter's `sent` row. Waits until this replica has received that row
+ * from the network; otherwise `change` would no-op and Alice would never see accept/decline.
+ */
+async function patchInboxSentWhenSynced(
 	repo: Repo,
-	inboxUrl: string,
+	inboxUrl: AutomergeUrl,
 	inviteId: string,
 	status: InviteStatus
 ): Promise<void> {
-	const handle = await repo.find<InboxDoc>(inboxUrl as AutomergeUrl);
-	await handle.whenReady();
-	if (handle.isUnavailable()) {
-		return;
-	}
-	handle.change((d) => {
-		if (!Array.isArray(d.sent)) {
+	const deadline = Date.now() + 30_000;
+	const pollMs = 120;
+
+	while (Date.now() < deadline) {
+		const handle = await repo.find<InboxDoc>(inboxUrl);
+		await handle.whenReady();
+		if (handle.isUnavailable()) {
+			throw new Error('Inviter inbox is unavailable from this device (offline?).');
+		}
+		const doc = handle.doc();
+		const sent = doc.sent ?? [];
+		const row = sent.find((s) => s.inviteId === inviteId);
+		if (row) {
+			handle.change((d) => {
+				const list = d.sent;
+				if (!Array.isArray(list)) {
+					return;
+				}
+				const r = list.find((s) => s.inviteId === inviteId);
+				if (r) {
+					r.status = status;
+					r.updatedAt = isoNow();
+				}
+			});
 			return;
 		}
-		const row = d.sent.find((s) => s.inviteId === inviteId);
-		if (row) {
-			row.status = status;
-			row.updatedAt = isoNow();
-		}
-	});
+		await new Promise<void>((resolve) => {
+			window.setTimeout(resolve, pollMs);
+		});
+	}
+
+	throw new Error(
+		'Still waiting for the inviter inbox to sync this invite. Stay on the same network and try again in a few seconds.'
+	);
 }
 
 export function InboxPage({
@@ -56,6 +79,16 @@ export function InboxPage({
 			setBusyId(inviteId);
 			setActionError(null);
 			try {
+				// Inviter first: their `sent` row must exist on our replica (synced over the repo).
+				// If we updated `received` first, users would see "accepted" locally while the remote
+				// never updated because patchInboxSent had no matching `sent` row yet.
+				await patchInboxSentWhenSynced(
+					repo,
+					inv.inviterInboxUrl as AutomergeUrl,
+					inv.inviterSentInviteId,
+					status
+				);
+
 				changeInbox((d) => {
 					const list = d.received;
 					if (!Array.isArray(list)) {
@@ -67,8 +100,6 @@ export function InboxPage({
 						row.updatedAt = isoNow();
 					}
 				});
-
-				await patchInboxSent(repo, inv.inviterInboxUrl, inv.inviterSentInviteId, status);
 
 				if (status === 'accepted') {
 					changeLocalRoot((d) => {
