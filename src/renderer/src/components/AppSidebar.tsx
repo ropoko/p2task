@@ -1,4 +1,8 @@
+import { useState } from 'react';
+
+import { ProfileSettingsDialog } from './ProfileSettingsDialog';
 import { IconSquare } from './IconSquare';
+import { useAppIdentity } from '../identity/identityContext';
 import type { WorkspaceEntity } from '../workspace/workspaceDoc';
 
 export type AppRoute = 'workspace' | 'myTasks' | 'activity' | 'inbox';
@@ -12,6 +16,18 @@ type AppSidebarProps = {
 	onNavigate: (route: AppRoute) => void;
 };
 
+function initialsFromNickname(nickname: string): string {
+	const t = nickname.trim();
+	if (!t) {
+		return '?';
+	}
+	const parts = t.split(/\s+/).filter(Boolean);
+	if (parts.length >= 2) {
+		return (parts[0]!.charAt(0) + parts[1]!.charAt(0)).toUpperCase();
+	}
+	return t.slice(0, 2).toUpperCase();
+}
+
 export function AppSidebar({
 	workspaces,
 	selectedWorkspaceId,
@@ -20,36 +36,16 @@ export function AppSidebar({
 	onAddWorkspace,
 	onNavigate
 }: AppSidebarProps): React.JSX.Element {
+	const identity = useAppIdentity();
+	const [profileOpen, setProfileOpen] = useState(false);
+
+	const displayName = identity.nickname.trim() || (identity.isFallback ? 'Local' : 'You');
+	const initials = initialsFromNickname(identity.nickname);
+
 	return (
 		<aside className="sidebar" aria-label="App">
-			<div className="sidebar__label">Workspaces</div>
-			<nav className="sidebar__nav sidebar__nav--scroll" aria-label="Workspaces">
-				{workspaces.map((w) => (
-					<button
-						key={w.id}
-						type="button"
-						className="sidebar__link"
-						data-active={route === 'workspace' && w.id === selectedWorkspaceId ? 'true' : 'false'}
-						onClick={() => {
-							onSelectWorkspace(w.id);
-							onNavigate('workspace');
-						}}
-					>
-						<IconSquare />
-						{w.name}
-					</button>
-				))}
-				<button
-					type="button"
-					className="sidebar__link sidebar__link--subtle"
-					onClick={onAddWorkspace}
-				>
-					+ Add workspace
-				</button>
-			</nav>
-
-			<div className="sidebar__label sidebar__label--spaced">Shared</div>
-			<nav className="sidebar__nav" aria-label="Shared pages">
+			<nav className="sidebar__nav sidebar__nav--fixed" aria-label="Shared pages">
+				<h1 className="sidebar__title">P2Task</h1>
 				<button
 					type="button"
 					className="sidebar__link"
@@ -79,12 +75,46 @@ export function AppSidebar({
 				</button>
 			</nav>
 
-			<div className="sidebar__footer">
+			<nav className="sidebar__nav sidebar__nav--scroll" aria-label="Workspaces">
+				<label className="sidebar__label">Workspaces</label>
+				{workspaces.map((w) => (
+					<button
+						key={w.id}
+						type="button"
+						className="sidebar__link"
+						data-active={route === 'workspace' && w.id === selectedWorkspaceId ? 'true' : 'false'}
+						onClick={() => {
+							onSelectWorkspace(w.id);
+							onNavigate('workspace');
+						}}
+					>
+						<IconSquare />
+						{w.name}
+					</button>
+				))}
+				<button
+					type="button"
+					className="sidebar__link sidebar__link--subtle"
+					onClick={onAddWorkspace}
+				>
+					+ Add workspace
+				</button>
+			</nav>
+
+			<button
+				type="button"
+				className="sidebar__footer"
+				aria-haspopup="dialog"
+				aria-expanded={profileOpen}
+				onClick={() => setProfileOpen(true)}
+			>
 				<div className="sidebar__avatar" aria-hidden>
-					AL
+					{initials}
 				</div>
-				<span className="sidebar__user-name">Ana Lima</span>
-			</div>
+				<span className="sidebar__user-name">{displayName}</span>
+			</button>
+
+			{profileOpen ? <ProfileSettingsDialog onClose={() => setProfileOpen(false)} /> : null}
 		</aside>
 	);
 }

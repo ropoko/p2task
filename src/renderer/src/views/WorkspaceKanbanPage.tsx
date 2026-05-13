@@ -1,10 +1,11 @@
-import { DEFAULT_CREATED_BY, type RootDoc } from '../workspace/workspaceDoc';
+import type { RootDoc } from '../workspace/workspaceDoc';
 import { sortedColumns, workspacesInDoc } from '../workspace/workspaceSelectors';
 
 type WorkspaceKanbanPageProps = {
 	workspaceId: string;
 	doc: RootDoc;
 	changeDoc: (fn: (d: RootDoc) => void) => void;
+	createdByUserId: string;
 };
 
 function newId(): string {
@@ -14,7 +15,8 @@ function newId(): string {
 export function WorkspaceKanbanPage({
 	workspaceId,
 	doc,
-	changeDoc
+	changeDoc,
+	createdByUserId
 }: WorkspaceKanbanPageProps): React.JSX.Element | null {
 	const ws = workspacesInDoc(doc).find((w) => w.id === workspaceId);
 	if (!ws) {
@@ -93,7 +95,7 @@ export function WorkspaceKanbanPage({
 				selectedForToday: false,
 				backlog: false,
 				intention: '',
-				created_by: DEFAULT_CREATED_BY
+				created_by: createdByUserId
 			});
 		});
 	};

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 
-import { DEFAULT_CREATED_BY, type RootDoc } from '../workspace/workspaceDoc';
+import type { RootDoc } from '../workspace/workspaceDoc';
 import { workspacesInDoc } from '../workspace/workspaceSelectors';
 
 type WorkspaceNotesPageProps = {
 	workspaceId: string;
 	doc: RootDoc;
 	changeDoc: (fn: (d: RootDoc) => void) => void;
+	createdByUserId: string;
 };
 
 function newId(): string {
@@ -16,7 +17,8 @@ function newId(): string {
 export function WorkspaceNotesPage({
 	workspaceId,
 	doc,
-	changeDoc
+	changeDoc,
+	createdByUserId
 }: WorkspaceNotesPageProps): React.JSX.Element | null {
 	const ws = workspacesInDoc(doc).find((w) => w.id === workspaceId);
 	const [draft, setDraft] = useState('');
@@ -43,7 +45,7 @@ export function WorkspaceNotesPage({
 				id: newId(),
 				text,
 				createdAt: new Date().toISOString(),
-				created_by: DEFAULT_CREATED_BY
+				created_by: createdByUserId
 			});
 		});
 		setDraft('');

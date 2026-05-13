@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 
 import { AppSidebar, type AppRoute } from './components/AppSidebar';
 import { IconSquare } from './components/IconSquare';
+import { useAppIdentity } from './identity/identityContext';
 import { FocusPage } from './views/FocusPage';
 import { MyTasksPage } from './views/MyTasksPage';
 import { WorkspaceKanbanPage } from './views/WorkspaceKanbanPage';
@@ -25,6 +26,7 @@ export type AppProps = {
 type AppView = 'normal' | 'focus';
 
 export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Element {
+	const { publicKeyId: createdByUserId } = useAppIdentity();
 	const [doc, changeDoc] = useDocument<RootDoc>(workspaceDocumentUrl, { suspense: true });
 	const [route, setRoute] = useState<AppRoute>('workspace');
 	const [workspaceTab, setWorkspaceTab] = useState<'kanban' | 'notes'>('kanban');
@@ -209,9 +211,19 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 					</div>
 				</header>
 				{workspaceTab === 'kanban' ? (
-					<WorkspaceKanbanPage workspaceId={resolvedWorkspaceId} doc={doc} changeDoc={changeDoc} />
+					<WorkspaceKanbanPage
+						workspaceId={resolvedWorkspaceId}
+						doc={doc}
+						changeDoc={changeDoc}
+						createdByUserId={createdByUserId}
+					/>
 				) : (
-					<WorkspaceNotesPage workspaceId={resolvedWorkspaceId} doc={doc} changeDoc={changeDoc} />
+					<WorkspaceNotesPage
+						workspaceId={resolvedWorkspaceId}
+						doc={doc}
+						changeDoc={changeDoc}
+						createdByUserId={createdByUserId}
+					/>
 				)}
 			</main>
 		);

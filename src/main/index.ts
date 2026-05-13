@@ -3,6 +3,8 @@ import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
+import { registerIdentityIpc } from './identityIpc';
+
 function createWindow(): void {
 	const mainWindow = new BrowserWindow({
 		width: 1200,
@@ -36,6 +38,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
 	electronApp.setAppUserModelId('com.electron');
+
+	registerIdentityIpc();
 
 	app.on('browser-window-created', (_, window) => {
 		optimizer.watchWindowShortcuts(window);
