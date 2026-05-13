@@ -3,6 +3,7 @@ import type { AddressInfo } from 'net';
 import { WebSocketServerAdapter } from '@automerge/automerge-repo-network-websocket';
 import WebSocket from 'isomorphic-ws';
 
+import { resolveLanListenPort } from './lanPort';
 import { getRepo } from './repo';
 import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 
@@ -28,7 +29,8 @@ export async function startLanServer(): Promise<LanServer> {
 
 	const repo = getRepo();
 
-	const wss = new WebSocketServer({ host: '0.0.0.0', port: 0 });
+	const port = resolveLanListenPort();
+	const wss = new WebSocketServer({ host: '0.0.0.0', port });
 	await new Promise<void>((resolve, reject) => {
 		const onListening = (): void => {
 			wss.off('error', onError);
@@ -43,13 +45,13 @@ export async function startLanServer(): Promise<LanServer> {
 	});
 
 	const address = wss.address() as AddressInfo;
-	const port = address.port;
+	const boundPort = address.port;
 
 	const adapter = new WebSocketServerAdapter(wss);
 	trackAdapterPeers(adapter, 'lan-in');
 	repo.networkSubsystem.addNetworkAdapter(adapter);
 
-	lanServer = { wss, adapter, port };
+	lanServer = { wss, adapter, port: boundPort };
 	return lanServer;
 }
 
