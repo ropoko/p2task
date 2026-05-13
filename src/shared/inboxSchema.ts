@@ -6,6 +6,8 @@ export type InboxReceivedInvite = {
 	inviteId: string;
 	fromPeerId: string;
 	fromNickname?: string;
+	/** Inviter's replicating profile doc URL (LAN / sync). */
+	inviterProfileDocUrl?: string;
 	shareRootUrl: string;
 	workspaceIds: string[];
 	inviterInboxUrl: string;
@@ -21,6 +23,8 @@ export type InboxSentInvite = {
 	targetInboxUrl: string;
 	shareRootUrl: string;
 	workspaceIds: string[];
+	/** Inviter's profile doc URL (echo for sent list / future sync). */
+	inviterProfileDocUrl?: string;
 	status: InviteStatus;
 	createdAt: string;
 	updatedAt?: string;

@@ -23,6 +23,8 @@ type BootState =
 			phase: 'ready';
 			workspaceUrl: AutomergeUrl;
 			inboxUrl: AutomergeUrl;
+			peerProfileUrl: AutomergeUrl;
+			knownPeersUrl: AutomergeUrl;
 			identity: AppIdentity;
 			repo: Repo;
 	  };
@@ -81,6 +83,8 @@ async function buildRepoAndUrls(): Promise<{
 	repo: Repo;
 	workspaceUrl: AutomergeUrl;
 	inboxUrl: AutomergeUrl;
+	peerProfileUrl: AutomergeUrl;
+	knownPeersUrl: AutomergeUrl;
 }> {
 	const repoApi = window.api?.repo;
 	if (!repoApi) {
@@ -101,7 +105,21 @@ async function buildRepoAndUrls(): Promise<{
 	if (!isValidAutomergeUrl(rawInbox)) {
 		throw new Error(`Main process returned an invalid inbox Automerge URL: ${rawInbox}`);
 	}
-	return { repo, workspaceUrl: rawUrl, inboxUrl: rawInbox };
+	const rawPeerProfile = await repoApi.getPeerProfileUrl();
+	if (!isValidAutomergeUrl(rawPeerProfile)) {
+		throw new Error(`Main process returned an invalid peer profile Automerge URL: ${rawPeerProfile}`);
+	}
+	const rawKnownPeers = await repoApi.getKnownPeersUrl();
+	if (!isValidAutomergeUrl(rawKnownPeers)) {
+		throw new Error(`Main process returned an invalid known peers Automerge URL: ${rawKnownPeers}`);
+	}
+	return {
+		repo,
+		workspaceUrl: rawUrl,
+		inboxUrl: rawInbox,
+		peerProfileUrl: rawPeerProfile,
+		knownPeersUrl: rawKnownPeers
+	};
 }
 
 export function Root(): React.JSX.Element {
@@ -128,7 +146,7 @@ export function Root(): React.JSX.Element {
 					setBoot({ phase: 'welcome' });
 					return;
 				}
-				const { repo, workspaceUrl, inboxUrl } = await buildRepoAndUrls();
+				const { repo, workspaceUrl, inboxUrl, peerProfileUrl, knownPeersUrl } = await buildRepoAndUrls();
 				if (cancelled) {
 					return;
 				}
@@ -136,6 +154,8 @@ export function Root(): React.JSX.Element {
 					phase: 'ready',
 					workspaceUrl,
 					inboxUrl,
+					peerProfileUrl,
+					knownPeersUrl,
 					repo,
 					identity: {
 						publicKeyId: status.publicKeyId,
@@ -157,11 +177,13 @@ export function Root(): React.JSX.Element {
 	}, []);
 
 	const handleWelcomeSuccess = async (identity: IdentityPublic): Promise<void> => {
-		const { repo, workspaceUrl, inboxUrl } = await buildRepoAndUrls();
+		const { repo, workspaceUrl, inboxUrl, peerProfileUrl, knownPeersUrl } = await buildRepoAndUrls();
 		setBoot({
 			phase: 'ready',
 			workspaceUrl,
 			inboxUrl,
+			peerProfileUrl,
+			knownPeersUrl,
 			repo,
 			identity: { ...identity, isFallback: false }
 		});
@@ -183,7 +205,12 @@ export function Root(): React.JSX.Element {
 		<IdentityProvider value={boot.identity}>
 			<RepoContext.Provider value={boot.repo}>
 				<Suspense fallback={<LoadingRoot />}>
-					<App workspaceDocumentUrl={boot.workspaceUrl} inboxDocumentUrl={boot.inboxUrl} />
+					<App
+						workspaceDocumentUrl={boot.workspaceUrl}
+						inboxDocumentUrl={boot.inboxUrl}
+						peerProfileDocumentUrl={boot.peerProfileUrl}
+						knownPeersDocumentUrl={boot.knownPeersUrl}
+					/>
 				</Suspense>
 			</RepoContext.Provider>
 		</IdentityProvider>

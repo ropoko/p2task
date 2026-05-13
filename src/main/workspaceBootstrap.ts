@@ -4,7 +4,14 @@ import { join } from 'path';
 import { isValidAutomergeUrl, type AutomergeUrl, type Repo } from '@automerge/automerge-repo';
 
 import { createInitialInboxDoc, type InboxDoc } from '../shared/inboxSchema';
+import {
+	createInitialKnownPeersDoc,
+	createInitialPeerProfileDoc,
+	type KnownPeersDoc,
+	type PeerProfileDoc
+} from '../shared/peerDirectorySchema';
 import { createInitialRootDoc, type RootDoc } from '../shared/workspaceSchema';
+import { getIdentityStatus } from './identityStore';
 import { p2taskDir } from './identityPaths';
 
 const WORKSPACE_FILE = 'workspace.json';
@@ -12,6 +19,8 @@ const WORKSPACE_FILE = 'workspace.json';
 type WorkspaceConfig = {
 	rootDocUrl: string;
 	inboxDocUrl?: string;
+	peerProfileDocUrl?: string;
+	knownPeersDocUrl?: string;
 };
 
 function workspaceConfigPath(): string {
@@ -37,6 +46,12 @@ function readWorkspaceConfig(): WorkspaceConfig | null {
 		const out: WorkspaceConfig = { rootDocUrl: p.rootDocUrl };
 		if (typeof p.inboxDocUrl === 'string') {
 			out.inboxDocUrl = p.inboxDocUrl;
+		}
+		if (typeof p.peerProfileDocUrl === 'string') {
+			out.peerProfileDocUrl = p.peerProfileDocUrl;
+		}
+		if (typeof p.knownPeersDocUrl === 'string') {
+			out.knownPeersDocUrl = p.knownPeersDocUrl;
 		}
 		return out;
 	} catch {
@@ -78,7 +93,9 @@ export async function getOrCreateRootDocUrl(repo: Repo): Promise<AutomergeUrl> {
 	const prev = readWorkspaceConfig();
 	writeWorkspaceConfig({
 		rootDocUrl: url,
-		...(prev?.inboxDocUrl ? { inboxDocUrl: prev.inboxDocUrl } : {})
+		...(prev?.inboxDocUrl ? { inboxDocUrl: prev.inboxDocUrl } : {}),
+		...(prev?.peerProfileDocUrl ? { peerProfileDocUrl: prev.peerProfileDocUrl } : {}),
+		...(prev?.knownPeersDocUrl ? { knownPeersDocUrl: prev.knownPeersDocUrl } : {})
 	});
 	return url;
 }
@@ -110,4 +127,71 @@ export async function getOrCreateInboxDocUrl(repo: Repo): Promise<AutomergeUrl> 
 	const inboxUrl = handle.url;
 	writeWorkspaceConfig({ ...config, inboxDocUrl: inboxUrl });
 	return inboxUrl;
+}
+
+/**
+ * Replicating public profile (nickname / email) for this peer identity.
+ */
+export async function getOrCreatePeerProfileDocUrl(repo: Repo): Promise<AutomergeUrl> {
+	await getOrCreateRootDocUrl(repo);
+	const config = readWorkspaceConfig();
+	if (!config) {
+		throw new Error('workspace.json missing after root bootstrap');
+	}
+	if (config.peerProfileDocUrl && isValidAutomergeUrl(config.peerProfileDocUrl)) {
+		try {
+			const handle = await repo.find<PeerProfileDoc>(config.peerProfileDocUrl);
+			await handle.whenReady();
+			if (!handle.isUnavailable()) {
+				return config.peerProfileDocUrl;
+			}
+		} catch {
+			// Fall through and create a fresh profile doc below.
+		}
+	}
+
+	const id = getIdentityStatus();
+	if (!id.exists) {
+		throw new Error('Identity is required to create a peer profile document.');
+	}
+
+	const handle = repo.create<PeerProfileDoc>(
+		createInitialPeerProfileDoc({
+			peerId: id.publicKeyId,
+			nickname: id.nickname,
+			email: id.email
+		})
+	);
+	await handle.whenReady();
+	const profileUrl = handle.url;
+	writeWorkspaceConfig({ ...config, peerProfileDocUrl: profileUrl });
+	return profileUrl;
+}
+
+/**
+ * Local roster of peerId → profile Automerge URL.
+ */
+export async function getOrCreateKnownPeersDocUrl(repo: Repo): Promise<AutomergeUrl> {
+	await getOrCreateRootDocUrl(repo);
+	const config = readWorkspaceConfig();
+	if (!config) {
+		throw new Error('workspace.json missing after root bootstrap');
+	}
+	if (config.knownPeersDocUrl && isValidAutomergeUrl(config.knownPeersDocUrl)) {
+		try {
+			const handle = await repo.find<KnownPeersDoc>(config.knownPeersDocUrl);
+			await handle.whenReady();
+			if (!handle.isUnavailable()) {
+				return config.knownPeersDocUrl;
+			}
+		} catch {
+			// Fall through and create a fresh known-peers doc below.
+		}
+	}
+
+	const handle = repo.create<KnownPeersDoc>(createInitialKnownPeersDoc());
+	await handle.whenReady();
+	const knownUrl = handle.url;
+	writeWorkspaceConfig({ ...config, knownPeersDocUrl: knownUrl });
+	return knownUrl;
 }

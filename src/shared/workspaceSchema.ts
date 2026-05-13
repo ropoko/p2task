@@ -50,6 +50,8 @@ export type AcceptedShare = {
 	shareRootUrl: string;
 	workspaceIds: string[];
 	fromPeerId: string;
+	/** Display name from invite when accepted; older shares may omit this. */
+	fromNickname?: string;
 	acceptedAt: string;
 };
 

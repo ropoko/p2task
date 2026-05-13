@@ -1,11 +1,14 @@
 import type { Repo } from '@automerge/automerge-repo';
+import { isValidAutomergeUrl } from '@automerge/automerge-repo';
 import { useDocument, useRepo, type AutomergeUrl } from '@automerge/react';
 import { useCallback, useState } from 'react';
 
-import type { InboxDoc, InviteStatus, RootDoc } from '../workspace/workspaceDoc';
+import type { InboxDoc, InviteStatus, KnownPeersDoc, RootDoc } from '../workspace/workspaceDoc';
+import { upsertKnownPeer } from '../workspace/workspaceDoc';
 
 type InboxPageProps = {
 	inboxDocumentUrl: AutomergeUrl;
+	knownPeersDocumentUrl: AutomergeUrl;
 	changeLocalRoot: (fn: (d: RootDoc) => void) => void;
 	myNickname: string;
 };
@@ -93,11 +96,13 @@ async function patchInboxSentWhenSynced(
 
 export function InboxPage({
 	inboxDocumentUrl,
+	knownPeersDocumentUrl,
 	changeLocalRoot,
 	myNickname
 }: InboxPageProps): React.JSX.Element {
 	const repo = useRepo();
 	const [inboxDoc, changeInbox] = useDocument<InboxDoc>(inboxDocumentUrl, { suspense: true });
+	const [, changeKnownPeers] = useDocument<KnownPeersDoc>(knownPeersDocumentUrl, { suspense: true });
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -152,9 +157,19 @@ export function InboxPage({
 							shareRootUrl: inv.shareRootUrl,
 							workspaceIds: [...inv.workspaceIds],
 							fromPeerId: inv.fromPeerId,
+							fromNickname: inv.fromNickname?.trim() || undefined,
 							acceptedAt: isoNow()
 						});
 					});
+					if (inv.inviterProfileDocUrl && isValidAutomergeUrl(inv.inviterProfileDocUrl)) {
+						const profileUrl = inv.inviterProfileDocUrl;
+						changeKnownPeers((d) => {
+							if (!Array.isArray(d.peers)) {
+								d.peers = [];
+							}
+							upsertKnownPeer(d.peers, inv.fromPeerId, profileUrl);
+						});
+					}
 				}
 			} catch (e) {
 				setActionError(e instanceof Error ? e.message : 'Invite update failed.');
@@ -162,7 +177,7 @@ export function InboxPage({
 				setBusyId(null);
 			}
 		},
-		[changeInbox, changeLocalRoot, inboxDoc, repo]
+		[changeInbox, changeKnownPeers, changeLocalRoot, inboxDoc, repo]
 	);
 
 	const received = inboxDoc.received ?? [];

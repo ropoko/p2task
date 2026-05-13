@@ -4,13 +4,15 @@ import { MessageChannelNetworkAdapter } from '@automerge/automerge-repo-network-
 
 import {
 	P2TASK_REPO_GET_INBOX_URL,
+	P2TASK_REPO_GET_KNOWN_PEERS_URL,
+	P2TASK_REPO_GET_PEER_PROFILE_URL,
 	P2TASK_REPO_GET_ROOT_URL,
 	P2TASK_REPO_PORT_CHANNEL,
 	P2TASK_REPO_REQUEST_PORT
 } from '../shared/p2taskIpc';
 import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 import { bootRepoIfReady, getRepo, isRepoReady } from './repo';
-import { getOrCreateInboxDocUrl, getOrCreateRootDocUrl } from './workspaceBootstrap';
+import { getOrCreateInboxDocUrl, getOrCreateKnownPeersDocUrl, getOrCreatePeerProfileDocUrl, getOrCreateRootDocUrl } from './workspaceBootstrap';
 
 /**
  * Adapts Electron's MessagePortMain (Node EventEmitter style: `.on`/`.off`)
@@ -131,5 +133,21 @@ export function registerRepoIpcBridge(): void {
 			throw new Error('Repo is not ready. Identity must be created first.');
 		}
 		return getOrCreateInboxDocUrl(repo);
+	});
+
+	ipcMain.handle(P2TASK_REPO_GET_PEER_PROFILE_URL, async () => {
+		const repo = bootRepoIfReady();
+		if (!repo) {
+			throw new Error('Repo is not ready. Identity must be created first.');
+		}
+		return getOrCreatePeerProfileDocUrl(repo);
+	});
+
+	ipcMain.handle(P2TASK_REPO_GET_KNOWN_PEERS_URL, async () => {
+		const repo = bootRepoIfReady();
+		if (!repo) {
+			throw new Error('Repo is not ready. Identity must be created first.');
+		}
+		return getOrCreateKnownPeersDocUrl(repo);
 	});
 }

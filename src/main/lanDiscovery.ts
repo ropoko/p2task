@@ -24,12 +24,14 @@ type BeaconPayload = {
 	peerId?: unknown;
 	wsPort?: unknown;
 	inboxDocUrl?: unknown;
+	profileDocUrl?: unknown;
 };
 
 type Discovered = {
 	peerId: string;
 	url: string;
 	inboxDocUrl?: string;
+	profileDocUrl?: string;
 	adapter: WebSocketClientAdapter | null;
 	lastSeen: number;
 };
@@ -38,10 +40,16 @@ let socket: dgram.Socket | null = null;
 let announceTimer: ReturnType<typeof setInterval> | null = null;
 const discoveredPeers = new Map<string, Discovered>();
 let localBeaconInboxDocUrl: string | null = null;
+let localBeaconProfileDocUrl: string | null = null;
 
 /** Called after workspace inbox URL is known (e.g. from network boot). */
 export function setLanBeaconInboxDocUrl(url: string | null): void {
 	localBeaconInboxDocUrl = url && isValidAutomergeUrl(url) ? url : null;
+}
+
+/** Called after peer profile doc URL is known (replicates nickname/email to LAN peers). */
+export function setLanBeaconProfileDocUrl(url: string | null): void {
+	localBeaconProfileDocUrl = url && isValidAutomergeUrl(url) ? url : null;
 }
 
 function isIpv4Family(family: os.NetworkInterfaceInfo['family']): boolean {
@@ -146,6 +154,10 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 	const inboxDocUrl =
 		typeof inboxRaw === 'string' && isValidAutomergeUrl(inboxRaw) ? inboxRaw : undefined;
 
+	const profileRaw = payload.profileDocUrl;
+	const profileDocUrl =
+		typeof profileRaw === 'string' && isValidAutomergeUrl(profileRaw) ? profileRaw : undefined;
+
 	const repo = getRepo();
 	const localPeerId = repo.peerId;
 	const remotePeerId = payload.peerId;
@@ -163,6 +175,9 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 		if (inboxDocUrl) {
 			existing.inboxDocUrl = inboxDocUrl;
 		}
+		if (profileDocUrl) {
+			existing.profileDocUrl = profileDocUrl;
+		}
 		return;
 	}
 
@@ -171,6 +186,7 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 			peerId: remotePeerId,
 			url,
 			...(inboxDocUrl ? { inboxDocUrl } : {}),
+			...(profileDocUrl ? { profileDocUrl } : {}),
 			adapter: null,
 			lastSeen: now
 		});
@@ -185,6 +201,7 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 		peerId: remotePeerId,
 		url,
 		...(inboxDocUrl ? { inboxDocUrl } : {}),
+		...(profileDocUrl ? { profileDocUrl } : {}),
 		adapter,
 		lastSeen: now
 	});
@@ -215,6 +232,7 @@ function sendBeacon(discoveryPort: number): void {
 		wsPort: number;
 		host?: string;
 		inboxDocUrl?: string;
+		profileDocUrl?: string;
 	} = {
 		v: BEACON_VERSION_SEND,
 		peerId: repo.peerId,
@@ -225,6 +243,9 @@ function sendBeacon(discoveryPort: number): void {
 	}
 	if (localBeaconInboxDocUrl) {
 		body.inboxDocUrl = localBeaconInboxDocUrl;
+	}
+	if (localBeaconProfileDocUrl) {
+		body.profileDocUrl = localBeaconProfileDocUrl;
 	}
 	const buf = Buffer.from(JSON.stringify(body), 'utf8');
 	socket.send(buf, discoveryPort, BROADCAST_ADDR, (err) => {
@@ -302,11 +323,13 @@ export function getLanDiscoveredPeers(): Array<{
 	peerId: string;
 	url: string;
 	inboxDocUrl?: string;
+	profileDocUrl?: string;
 }> {
-	return Array.from(discoveredPeers.values()).map(({ peerId, url, inboxDocUrl }) => ({
+	return Array.from(discoveredPeers.values()).map(({ peerId, url, inboxDocUrl, profileDocUrl }) => ({
 		peerId,
 		url,
-		...(inboxDocUrl ? { inboxDocUrl } : {})
+		...(inboxDocUrl ? { inboxDocUrl } : {}),
+		...(profileDocUrl ? { profileDocUrl } : {})
 	}));
 }
 

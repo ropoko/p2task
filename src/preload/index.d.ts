@@ -14,6 +14,8 @@ export type P2taskApi = {
 		requestPort(): Promise<void>;
 		getRootUrl(): Promise<string>;
 		getInboxUrl(): Promise<string>;
+		getPeerProfileUrl(): Promise<string>;
+		getKnownPeersUrl(): Promise<string>;
 		portChannel: string;
 	};
 

@@ -9,6 +9,8 @@ import {
 	P2TASK_IDENTITY_UPDATE_PROFILE,
 	P2TASK_NETWORK_GET_STATUS,
 	P2TASK_REPO_GET_INBOX_URL,
+	P2TASK_REPO_GET_KNOWN_PEERS_URL,
+	P2TASK_REPO_GET_PEER_PROFILE_URL,
 	P2TASK_REPO_GET_ROOT_URL,
 	P2TASK_REPO_PORT_CHANNEL,
 	P2TASK_REPO_REQUEST_PORT
@@ -51,6 +53,12 @@ const api = {
 		},
 		getInboxUrl(): Promise<string> {
 			return ipcRenderer.invoke(P2TASK_REPO_GET_INBOX_URL);
+		},
+		getPeerProfileUrl(): Promise<string> {
+			return ipcRenderer.invoke(P2TASK_REPO_GET_PEER_PROFILE_URL);
+		},
+		getKnownPeersUrl(): Promise<string> {
+			return ipcRenderer.invoke(P2TASK_REPO_GET_KNOWN_PEERS_URL);
 		},
 		portChannel: P2TASK_REPO_PORT_CHANNEL
 	},

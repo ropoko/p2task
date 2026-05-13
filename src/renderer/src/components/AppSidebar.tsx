@@ -1,23 +1,36 @@
+import { useDocument, type AutomergeUrl } from '@automerge/react';
 import { useState } from 'react';
 
+import { PeerDirectoryName } from './PeerDirectoryName';
 import { ProfileSettingsDialog } from './ProfileSettingsDialog';
 import { IconSquare } from './IconSquare';
 import { useAppIdentity } from '../identity/identityContext';
+import type { KnownPeersDoc } from '../workspace/workspaceDoc';
 
 export type AppRoute = 'workspace' | 'myTasks' | 'activity' | 'inbox' | 'peers';
 
-type SidebarWorkspaceItem = {
+export type SidebarWorkspaceItem = {
 	key: string;
 	name: string;
 };
 
+export type SidebarSharedWorkspaceItem = {
+	key: string;
+	workspaceName: string;
+	fromPeerId: string;
+	hostSnapshot: string;
+};
+
 type AppSidebarProps = {
-	workspaces: SidebarWorkspaceItem[];
+	localWorkspaces: SidebarWorkspaceItem[];
+	sharedWorkspaces: SidebarSharedWorkspaceItem[];
+	knownPeersDocumentUrl: AutomergeUrl;
 	selectedWorkspaceKey: string;
 	route: AppRoute;
 	onSelectWorkspace: (key: string) => void;
 	onAddWorkspace: () => void;
 	onNavigate: (route: AppRoute) => void;
+	onAfterProfileSave?: (input: { nickname: string; email: string }) => void;
 };
 
 function initialsFromNickname(nickname: string): string {
@@ -33,15 +46,19 @@ function initialsFromNickname(nickname: string): string {
 }
 
 export function AppSidebar({
-	workspaces,
+	localWorkspaces,
+	sharedWorkspaces,
+	knownPeersDocumentUrl,
 	selectedWorkspaceKey,
 	route,
 	onSelectWorkspace,
 	onAddWorkspace,
-	onNavigate
+	onNavigate,
+	onAfterProfileSave
 }: AppSidebarProps): React.JSX.Element {
 	const identity = useAppIdentity();
 	const [profileOpen, setProfileOpen] = useState(false);
+	const [knownPeersDoc] = useDocument<KnownPeersDoc>(knownPeersDocumentUrl, { suspense: true });
 
 	const displayName = identity.nickname.trim() || (identity.isFallback ? 'Local' : 'You');
 	const initials = initialsFromNickname(identity.nickname);
@@ -89,8 +106,10 @@ export function AppSidebar({
 			</nav>
 
 			<nav className="sidebar__nav sidebar__nav--scroll" aria-label="Workspaces">
-				<label className="sidebar__label">Workspaces</label>
-				{workspaces.map((w) => (
+				<label className="sidebar__label" id="sidebar-ws-local-heading">
+					Local
+				</label>
+				{localWorkspaces.map((w) => (
 					<button
 						key={w.key}
 						type="button"
@@ -113,6 +132,42 @@ export function AppSidebar({
 				>
 					+ Add workspace
 				</button>
+
+				<label
+					className="sidebar__label sidebar__label--spaced"
+					id="sidebar-ws-shared-heading"
+				>
+					Shared
+				</label>
+				{sharedWorkspaces.length === 0 ? (
+					<p className="sidebar__empty-hint">No shared workspaces yet.</p>
+				) : (
+					sharedWorkspaces.map((w) => (
+						<button
+							key={w.key}
+							type="button"
+							className="sidebar__link"
+							data-active={
+								route === 'workspace' && w.key === selectedWorkspaceKey ? 'true' : 'false'
+							}
+							onClick={() => {
+								onSelectWorkspace(w.key);
+								onNavigate('workspace');
+							}}
+						>
+							<IconSquare />
+							<span className="sidebar__link-label">
+								{w.workspaceName} (shared ·{' '}
+								<PeerDirectoryName
+									peerId={w.fromPeerId}
+									snapshotLabel={w.hostSnapshot}
+									knownPeers={knownPeersDoc}
+								/>
+								)
+							</span>
+						</button>
+					))
+				)}
 			</nav>
 
 			<button
@@ -128,7 +183,12 @@ export function AppSidebar({
 				<span className="sidebar__user-name">{displayName}</span>
 			</button>
 
-			{profileOpen ? <ProfileSettingsDialog onClose={() => setProfileOpen(false)} /> : null}
+			{profileOpen ? (
+				<ProfileSettingsDialog
+					onClose={() => setProfileOpen(false)}
+					onAfterProfileSave={onAfterProfileSave}
+				/>
+			) : null}
 		</aside>
 	);
 }

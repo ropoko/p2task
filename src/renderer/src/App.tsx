@@ -1,7 +1,12 @@
 import { useDocument, useRepo, type AutomergeUrl } from '@automerge/react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AppSidebar, type AppRoute } from './components/AppSidebar';
+import {
+	AppSidebar,
+	type AppRoute,
+	type SidebarSharedWorkspaceItem,
+	type SidebarWorkspaceItem
+} from './components/AppSidebar';
 import { IconSquare } from './components/IconSquare';
 import { InviteToWorkspacesDialog } from './components/InviteToWorkspacesDialog';
 import { ShareDocSync, type ShareDocBundle } from './components/ShareDocSync';
@@ -13,7 +18,7 @@ import { PeersPage } from './views/PeersPage';
 import { WorkspaceKanbanPage } from './views/WorkspaceKanbanPage';
 import { WorkspaceNotesPage } from './views/WorkspaceNotesPage';
 import { invitePeerToWorkspaces } from './workspace/invitePeer';
-import { createDefaultWorkspace, type RootDoc } from './workspace/workspaceDoc';
+import { createDefaultWorkspace, type PeerProfileDoc, type RootDoc } from './workspace/workspaceDoc';
 import {
 	makeLocalWorkspaceKey,
 	makeSharedWorkspaceKey,
@@ -33,14 +38,11 @@ import {
 export type AppProps = {
 	workspaceDocumentUrl: AutomergeUrl;
 	inboxDocumentUrl: AutomergeUrl;
+	peerProfileDocumentUrl: AutomergeUrl;
+	knownPeersDocumentUrl: AutomergeUrl;
 };
 
 type AppView = 'normal' | 'focus';
-
-type SidebarWorkspaceItem = {
-	key: string;
-	name: string;
-};
 
 type InviteDraft = {
 	targetPeerId: string;
@@ -50,11 +52,40 @@ type InviteDraft = {
 
 export default function App({
 	workspaceDocumentUrl,
-	inboxDocumentUrl
+	inboxDocumentUrl,
+	peerProfileDocumentUrl,
+	knownPeersDocumentUrl
 }: AppProps): React.JSX.Element {
 	const repo = useRepo();
-	const { publicKeyId: createdByUserId, nickname } = useAppIdentity();
+	const identity = useAppIdentity();
+	const { publicKeyId: createdByUserId, nickname } = identity;
 	const [localDoc, changeLocalDoc] = useDocument<RootDoc>(workspaceDocumentUrl, { suspense: true });
+	const [, changeMyPeerProfile] = useDocument<PeerProfileDoc>(peerProfileDocumentUrl, { suspense: true });
+	const profileBootSyncedRef = useRef(false);
+
+	useEffect(() => {
+		if (profileBootSyncedRef.current) {
+			return;
+		}
+		profileBootSyncedRef.current = true;
+		changeMyPeerProfile((d) => {
+			d.peerId = identity.publicKeyId;
+			d.nickname = identity.nickname.trim();
+			d.email = identity.email.trim().toLowerCase();
+			d.updatedAt = new Date().toISOString();
+		});
+	}, [changeMyPeerProfile, identity]);
+
+	const persistAutomergeProfile = useCallback(
+		(input: { nickname: string; email: string }) => {
+			changeMyPeerProfile((d) => {
+				d.nickname = input.nickname.trim();
+				d.email = input.email.trim().toLowerCase();
+				d.updatedAt = new Date().toISOString();
+			});
+		},
+		[changeMyPeerProfile]
+	);
 
 	const [shareDocMap, setShareDocMap] = useState(() => new Map<AutomergeUrl, ShareDocBundle>());
 	const onShareUpdate = useCallback((url: AutomergeUrl, bundle: ShareDocBundle) => {
@@ -71,11 +102,15 @@ export default function App({
 		[acceptedShares]
 	);
 
-	const sidebarWorkspaces = useMemo((): SidebarWorkspaceItem[] => {
-		const items: SidebarWorkspaceItem[] = [];
-		for (const w of workspacesInDoc(localDoc)) {
-			items.push({ key: makeLocalWorkspaceKey(w.id), name: w.name });
-		}
+	const sidebarLocalWorkspaces = useMemo((): SidebarWorkspaceItem[] => {
+		return workspacesInDoc(localDoc).map((w) => ({
+			key: makeLocalWorkspaceKey(w.id),
+			name: w.name
+		}));
+	}, [localDoc]);
+
+	const sidebarSharedWorkspaces = useMemo((): SidebarSharedWorkspaceItem[] => {
+		const items: SidebarSharedWorkspaceItem[] = [];
 		for (const share of acceptedShares) {
 			const bundle = shareDocMap.get(share.shareRootUrl as AutomergeUrl);
 			if (!bundle) {
@@ -85,25 +120,36 @@ export default function App({
 			for (const wid of share.workspaceIds) {
 				const ws = workspacesInDoc(doc).find((x) => x.id === wid);
 				if (ws) {
-					const short =
-						share.fromPeerId.length > 10 ? `${share.fromPeerId.slice(0, 8)}…` : share.fromPeerId;
+					const hostSnapshot =
+						share.fromNickname?.trim() ||
+						(share.fromPeerId.length > 10
+							? `${share.fromPeerId.slice(0, 8)}…`
+							: share.fromPeerId);
 					items.push({
 						key: makeSharedWorkspaceKey(share.shareRootUrl, ws.id),
-						name: `${ws.name} (shared · ${short})`
+						workspaceName: ws.name,
+						fromPeerId: share.fromPeerId,
+						hostSnapshot
 					});
 				}
 			}
 		}
 		return items;
-	}, [localDoc, acceptedShares, shareDocMap]);
+	}, [acceptedShares, shareDocMap]);
+
+	const sidebarWorkspaceKeys = useMemo(
+		() => [...sidebarLocalWorkspaces, ...sidebarSharedWorkspaces],
+		[sidebarLocalWorkspaces, sidebarSharedWorkspaces]
+	);
 
 	const [rawWorkspaceKey, setRawWorkspaceKey] = useState<string | null>(null);
+
 	const resolvedWorkspaceKey = useMemo(() => {
-		if (rawWorkspaceKey && sidebarWorkspaces.some((w) => w.key === rawWorkspaceKey)) {
+		if (rawWorkspaceKey && sidebarWorkspaceKeys.some((w) => w.key === rawWorkspaceKey)) {
 			return rawWorkspaceKey;
 		}
-		return sidebarWorkspaces[0]?.key ?? '';
-	}, [rawWorkspaceKey, sidebarWorkspaces]);
+		return sidebarWorkspaceKeys[0]?.key ?? '';
+	}, [rawWorkspaceKey, sidebarWorkspaceKeys]);
 
 	const activeParsed = useMemo(
 		() => parseWorkspaceKey(resolvedWorkspaceKey),
@@ -236,6 +282,7 @@ export default function App({
 			return (
 				<main className="main">
 					<PeersPage
+						knownPeersDocumentUrl={knownPeersDocumentUrl}
 						onInvitePeer={(draft) => {
 							setInviteDraft(draft);
 						}}
@@ -254,6 +301,7 @@ export default function App({
 									myPeerId: createdByUserId,
 									myNickname: nickname,
 									myInboxUrl: inboxDocumentUrl,
+									myPeerProfileUrl: peerProfileDocumentUrl,
 									shareRootUrl: workspaceDocumentUrl,
 									targetInboxUrl: inviteDraft.targetInboxUrl as AutomergeUrl,
 									targetPeerId: inviteDraft.targetPeerId,
@@ -271,6 +319,7 @@ export default function App({
 				<main className="main">
 					<InboxPage
 						inboxDocumentUrl={inboxDocumentUrl}
+						knownPeersDocumentUrl={knownPeersDocumentUrl}
 						changeLocalRoot={changeLocalDoc}
 						myNickname={nickname}
 					/>
@@ -383,7 +432,9 @@ export default function App({
 			<div className="app-chrome" aria-hidden={view === 'focus'}>
 				<div className="app-body">
 					<AppSidebar
-						workspaces={sidebarWorkspaces}
+						localWorkspaces={sidebarLocalWorkspaces}
+						sharedWorkspaces={sidebarSharedWorkspaces}
+						knownPeersDocumentUrl={knownPeersDocumentUrl}
 						selectedWorkspaceKey={resolvedWorkspaceKey}
 						route={route}
 						onSelectWorkspace={(key) => {
@@ -391,6 +442,7 @@ export default function App({
 						}}
 						onAddWorkspace={addWorkspace}
 						onNavigate={setRoute}
+						onAfterProfileSave={persistAutomergeProfile}
 					/>
 					{renderMain()}
 				</div>

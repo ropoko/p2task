@@ -1,4 +1,4 @@
-import type { DocHandle, Repo } from '@automerge/automerge-repo';
+import { isValidAutomergeUrl, type DocHandle, type Repo } from '@automerge/automerge-repo';
 import type { AutomergeUrl } from '@automerge/react';
 
 import type { InboxDoc } from '../../../shared/inboxSchema';
@@ -31,6 +31,7 @@ export async function invitePeerToWorkspaces(opts: {
 	myPeerId: string;
 	myNickname: string;
 	myInboxUrl: AutomergeUrl;
+	myPeerProfileUrl?: AutomergeUrl;
 	shareRootUrl: AutomergeUrl;
 	targetInboxUrl: AutomergeUrl;
 	targetPeerId: string;
@@ -39,6 +40,10 @@ export async function invitePeerToWorkspaces(opts: {
 	const inviteId = crypto.randomUUID();
 	const now = new Date().toISOString();
 	const inviterSentInviteId = inviteId;
+	const inviterProfileDocUrl =
+		opts.myPeerProfileUrl && isValidAutomergeUrl(opts.myPeerProfileUrl)
+			? opts.myPeerProfileUrl
+			: undefined;
 
 	const targetHandle = await waitForInboxHandle(opts.repo, opts.targetInboxUrl);
 
@@ -54,6 +59,7 @@ export async function invitePeerToWorkspaces(opts: {
 			targetInboxUrl: opts.targetInboxUrl,
 			shareRootUrl: opts.shareRootUrl,
 			workspaceIds: [...opts.workspaceIds],
+			...(inviterProfileDocUrl ? { inviterProfileDocUrl } : {}),
 			status: 'pending',
 			createdAt: now
 		});
@@ -67,6 +73,7 @@ export async function invitePeerToWorkspaces(opts: {
 			inviteId,
 			fromPeerId: opts.myPeerId,
 			fromNickname: opts.myNickname.trim() || undefined,
+			...(inviterProfileDocUrl ? { inviterProfileDocUrl } : {}),
 			shareRootUrl: opts.shareRootUrl,
 			workspaceIds: [...opts.workspaceIds],
 			inviterInboxUrl: opts.myInboxUrl,

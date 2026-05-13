@@ -5,7 +5,7 @@ import type { NetworkStatus } from '../shared/networkTypes';
 import { getLanDiscoveredPeers } from './lanDiscovery';
 import { getLanServerPort } from './lanServer';
 import { getLastNetworkBootError } from './networkBoot';
-import { getConnectedPeers } from './peerTransports';
+import { getConnectedPeers, getSeenPeers } from './peerTransports';
 import { getPubClientStatuses } from './pubClients';
 
 function snapshot(): NetworkStatus {
@@ -13,9 +13,10 @@ function snapshot(): NetworkStatus {
 	const lanPeers = getLanDiscoveredPeers();
 	const pubs = getPubClientStatuses();
 	const connectedPeers = getConnectedPeers();
+	const seenPeers = getSeenPeers();
 	const networkError = getLastNetworkBootError();
 
-	return { lanPort, networkError, lanPeers, pubs, connectedPeers };
+	return { lanPort, networkError, lanPeers, pubs, connectedPeers, seenPeers };
 }
 
 export function registerNetworkIpc(): void {

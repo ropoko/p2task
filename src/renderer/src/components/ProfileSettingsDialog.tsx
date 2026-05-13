@@ -5,6 +5,7 @@ import { useAppIdentity, useUpdateProfile } from '../identity/identityContext';
 
 type ProfileSettingsDialogProps = {
 	onClose: () => void;
+	onAfterProfileSave?: (input: { nickname: string; email: string }) => void;
 };
 
 type SettingsSection = 'settings' | 'profile';
@@ -84,7 +85,7 @@ function IconClose(): React.JSX.Element {
 	);
 }
 
-export function ProfileSettingsDialog({ onClose }: ProfileSettingsDialogProps): React.JSX.Element {
+export function ProfileSettingsDialog({ onClose, onAfterProfileSave }: ProfileSettingsDialogProps): React.JSX.Element {
 	const identity = useAppIdentity();
 	const updateProfile = useUpdateProfile();
 	const dialogTitleId = useId();
@@ -110,6 +111,7 @@ export function ProfileSettingsDialog({ onClose }: ProfileSettingsDialogProps): 
 		setSubmitting(true);
 		try {
 			await updateProfile({ nickname, email });
+			onAfterProfileSave?.({ nickname: nickname.trim(), email: email.trim() });
 			onClose();
 		} catch (err: unknown) {
 			const message =

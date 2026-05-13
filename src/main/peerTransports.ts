@@ -4,7 +4,7 @@ import type {
 	PeerDisconnectedPayload
 } from '@automerge/automerge-repo';
 
-import type { ConnectedPeerInfo, PeerTransport } from '../shared/networkTypes';
+import type { ConnectedPeerInfo, PeerTransport, SeenPeerInfo } from '../shared/networkTypes';
 
 type Tracker = {
 	keys: Set<string>;
@@ -14,6 +14,21 @@ type Tracker = {
 
 const trackers = new WeakMap<NetworkAdapterInterface, Tracker>();
 const connectedPeers = new Map<string, ConnectedPeerInfo>();
+const seenPeerRoutes = new Map<string, { viaLan: boolean; viaPub: boolean }>();
+
+function touchSeenPeerRoute(peerId: string, transport: PeerTransport): void {
+	let r = seenPeerRoutes.get(peerId);
+	if (!r) {
+		r = { viaLan: false, viaPub: false };
+		seenPeerRoutes.set(peerId, r);
+	}
+	if (transport === 'lan-in' || transport === 'lan-out') {
+		r.viaLan = true;
+	}
+	if (transport === 'pub') {
+		r.viaPub = true;
+	}
+}
 
 function peerKey(peer: ConnectedPeerInfo): string {
 	return `${peer.transport}:${peer.via ?? ''}:${peer.peerId}`;
@@ -36,6 +51,7 @@ export function trackAdapterPeers(
 				transport,
 				...(via ? { via } : {})
 			};
+			touchSeenPeerRoute(payload.peerId, transport);
 			const key = peerKey(peer);
 			tracker.keys.add(key);
 			connectedPeers.set(key, peer);
@@ -78,4 +94,10 @@ export function getConnectedPeers(): ConnectedPeerInfo[] {
 		}
 		return a.peerId.localeCompare(b.peerId);
 	});
+}
+
+export function getSeenPeers(): SeenPeerInfo[] {
+	return [...seenPeerRoutes.entries()]
+		.map(([peerId, { viaLan, viaPub }]) => ({ peerId, viaLan, viaPub }))
+		.sort((a, b) => a.peerId.localeCompare(b.peerId));
 }

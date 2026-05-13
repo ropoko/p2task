@@ -25,3 +25,10 @@ export type {
 	InviteStatus
 } from '../../../shared/inboxSchema';
 export { createInitialInboxDoc } from '../../../shared/inboxSchema';
+
+export type { KnownPeerEntry, KnownPeersDoc, PeerProfileDoc } from '../../../shared/peerDirectorySchema';
+export {
+	createInitialKnownPeersDoc,
+	createInitialPeerProfileDoc,
+	upsertKnownPeer
+} from '../../../shared/peerDirectorySchema';
