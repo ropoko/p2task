@@ -5,7 +5,7 @@ import { IconSquare } from './IconSquare';
 import { useAppIdentity } from '../identity/identityContext';
 import type { WorkspaceEntity } from '../workspace/workspaceDoc';
 
-export type AppRoute = 'workspace' | 'myTasks' | 'activity' | 'inbox';
+export type AppRoute = 'workspace' | 'myTasks' | 'activity' | 'inbox' | 'peers';
 
 type AppSidebarProps = {
 	workspaces: WorkspaceEntity[];
@@ -73,6 +73,15 @@ export function AppSidebar({
 					<IconSquare />
 					Inbox
 				</button>
+				<button
+					type="button"
+					className="sidebar__link"
+					data-active={route === 'peers' ? 'true' : 'false'}
+					onClick={() => onNavigate('peers')}
+				>
+					<IconSquare />
+					Peers
+				</button>
 			</nav>
 
 			<nav className="sidebar__nav sidebar__nav--scroll" aria-label="Workspaces">
@@ -92,6 +101,7 @@ export function AppSidebar({
 						{w.name}
 					</button>
 				))}
+
 				<button
 					type="button"
 					className="sidebar__link sidebar__link--subtle"

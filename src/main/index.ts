@@ -4,6 +4,9 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
 import { registerIdentityIpc } from './identityIpc';
+import { bootNetworkIfReady, shutdownNetwork } from './networkBoot';
+import { registerNetworkIpc } from './networkIpc';
+import { registerRepoIpcBridge } from './repoIpcBridge';
 
 function createWindow(): void {
 	const mainWindow = new BrowserWindow({
@@ -40,6 +43,9 @@ app.whenReady().then(() => {
 	electronApp.setAppUserModelId('com.electron');
 
 	registerIdentityIpc();
+	registerRepoIpcBridge();
+	registerNetworkIpc();
+	void bootNetworkIfReady();
 
 	app.on('browser-window-created', (_, window) => {
 		optimizer.watchWindowShortcuts(window);
@@ -61,4 +67,8 @@ app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') {
 		app.quit();
 	}
+});
+
+app.on('before-quit', () => {
+	shutdownNetwork();
 });

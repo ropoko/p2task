@@ -6,6 +6,7 @@ import { IconSquare } from './components/IconSquare';
 import { useAppIdentity } from './identity/identityContext';
 import { FocusPage } from './views/FocusPage';
 import { MyTasksPage } from './views/MyTasksPage';
+import { PeersPage } from './views/PeersPage';
 import { WorkspaceKanbanPage } from './views/WorkspaceKanbanPage';
 import { WorkspaceNotesPage } from './views/WorkspaceNotesPage';
 import { createDefaultWorkspace, type RootDoc } from './workspace/workspaceDoc';
@@ -136,6 +137,14 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 	};
 
 	const renderMain = (): React.JSX.Element => {
+		if (route === 'peers') {
+			return (
+				<main className="main">
+					<PeersPage />
+				</main>
+			);
+		}
+
 		if (!activeWorkspace) {
 			return (
 				<main className="main">

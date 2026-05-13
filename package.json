@@ -1,9 +1,9 @@
 {
-	"name": "my-app",
-	"version": "1.0.0",
-	"description": "An Electron application with React and TypeScript",
+	"name": "p2task",
+	"version": "0.0.1",
+	"description": "A local-first project management tool",
 	"main": "./out/main/index.js",
-	"author": "example.com",
+	"author": "ropoko",
 	"homepage": "https://electron-vite.org",
 	"scripts": {
 		"format": "prettier --write .",
@@ -14,17 +14,22 @@
 		"start": "electron-vite preview",
 		"dev": "electron-vite dev",
 		"build": "npm run typecheck && electron-vite build",
-		"postinstall": "electron-builder install-app-deps",
 		"build:unpack": "npm run build && electron-builder --dir",
 		"build:win": "npm run build && electron-builder --win",
 		"build:mac": "electron-vite build && electron-builder --mac",
 		"build:linux": "electron-vite build && electron-builder --linux"
 	},
 	"dependencies": {
+		"@automerge/automerge-repo": "^2.5.5",
+		"@automerge/automerge-repo-network-messagechannel": "^2.5.5",
+		"@automerge/automerge-repo-network-websocket": "^2.5.5",
+		"@automerge/automerge-repo-storage-nodefs": "^2.5.5",
 		"@automerge/react": "^2.5.5",
 		"@electron-toolkit/preload": "^3.0.2",
 		"@electron-toolkit/utils": "^4.0.0",
-		"electron-updater": "^6.3.9"
+		"bonjour-service": "^1.3.0",
+		"electron-updater": "^6.3.9",
+		"isomorphic-ws": "^5.0.0"
 	},
 	"devDependencies": {
 		"@electron-toolkit/eslint-config-prettier": "^3.0.0",
@@ -33,6 +38,7 @@
 		"@types/node": "^22.19.1",
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
+		"@types/ws": "^8.18.1",
 		"@vitejs/plugin-react": "^5.1.1",
 		"electron": "^39.2.6",
 		"electron-builder": "^26.0.12",

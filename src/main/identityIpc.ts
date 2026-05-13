@@ -6,6 +6,7 @@ import {
 	P2TASK_IDENTITY_UPDATE_PROFILE
 } from '../shared/p2taskIpc';
 import { createIdentity, getIdentityStatus, updateProfile } from './identityStore';
+import { bootNetworkIfReady } from './networkBoot';
 
 export function registerIdentityIpc(): void {
 	ipcMain.handle(P2TASK_IDENTITY_GET_STATUS, () => getIdentityStatus());
@@ -20,7 +21,9 @@ export function registerIdentityIpc(): void {
 			throw new Error('Invalid identity payload');
 		}
 		const { nickname, email } = payload as { nickname: string; email: string };
-		return createIdentity({ nickname, email });
+		const result = createIdentity({ nickname, email });
+		void bootNetworkIfReady();
+		return result;
 	});
 
 	ipcMain.handle(P2TASK_IDENTITY_UPDATE_PROFILE, (_event, payload: unknown) => {
