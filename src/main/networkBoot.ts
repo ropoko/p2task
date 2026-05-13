@@ -4,6 +4,11 @@ import { startPubClients, stopPubClients } from './pubClients';
 import { bootRepoIfReady } from './repo';
 
 let started = false;
+let lastNetworkBootError: string | null = null;
+
+export function getLastNetworkBootError(): string | null {
+	return lastNetworkBootError;
+}
 
 /**
  * Bring up the Repo and all of its network adapters if identity is present.
@@ -18,12 +23,15 @@ export async function bootNetworkIfReady(): Promise<void> {
 		return;
 	}
 
+	lastNetworkBootError = null;
 	try {
 		await startLanServer();
 		startLanDiscovery();
 		startPubClients();
 		started = true;
 	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		lastNetworkBootError = message;
 		console.error('Failed to start networking', err);
 		stopPubClients();
 		stopLanDiscovery();

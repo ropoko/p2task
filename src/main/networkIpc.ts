@@ -4,6 +4,7 @@ import { P2TASK_NETWORK_GET_STATUS } from '../shared/p2taskIpc';
 import type { NetworkStatus } from '../shared/networkTypes';
 import { getLanDiscoveredPeers } from './lanDiscovery';
 import { getLanServerPort } from './lanServer';
+import { getLastNetworkBootError } from './networkBoot';
 import { getConnectedPeers } from './peerTransports';
 import { getPubClientStatuses } from './pubClients';
 
@@ -12,8 +13,9 @@ function snapshot(): NetworkStatus {
 	const lanPeers = getLanDiscoveredPeers();
 	const pubs = getPubClientStatuses();
 	const connectedPeers = getConnectedPeers();
+	const networkError = getLastNetworkBootError();
 
-	return { lanPort, lanPeers, pubs, connectedPeers };
+	return { lanPort, networkError, lanPeers, pubs, connectedPeers };
 }
 
 export function registerNetworkIpc(): void {

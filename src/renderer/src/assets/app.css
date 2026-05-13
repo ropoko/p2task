@@ -848,6 +848,21 @@ textarea {
 	font-size: 13px;
 }
 
+.peers-device__row--full {
+	flex-wrap: wrap;
+}
+
+.peers-device__row--full .peers-device__desc {
+	flex: 1 1 100%;
+	min-width: 0;
+	word-break: break-word;
+}
+
+.peers-device__error {
+	color: var(--color-accent-dot);
+	font-size: 12px;
+}
+
 .peers-card__dot {
 	width: 8px;
 	height: 8px;

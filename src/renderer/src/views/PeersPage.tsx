@@ -103,6 +103,7 @@ export function PeersPage(): React.JSX.Element {
 	}, [status]);
 
 	const lanPort = status?.lanPort ?? null;
+	const networkError = status?.networkError ?? null;
 
 	return (
 		<>
@@ -157,6 +158,14 @@ export function PeersPage(): React.JSX.Element {
 								)}
 							</dd>
 						</div>
+						{networkError ? (
+							<div className="peers-device__row peers-device__row--full">
+								<dt className="peers-device__term">LAN discovery</dt>
+								<dd className="peers-device__desc peers-device__error" title={networkError}>
+									{networkError}
+								</dd>
+							</div>
+						) : null}
 					</dl>
 				</div>
 			</section>

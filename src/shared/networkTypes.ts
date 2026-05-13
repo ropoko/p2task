@@ -18,6 +18,8 @@ export type ConnectedPeerInfo = {
 
 export type NetworkStatus = {
 	lanPort: number | null;
+	/** Set when LAN listen or UDP discovery failed during last boot attempt */
+	networkError: string | null;
 	lanPeers: LanPeerInfo[];
 	pubs: PubInfo[];
 	connectedPeers: ConnectedPeerInfo[];
