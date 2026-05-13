@@ -1,6 +1,8 @@
 export type LanPeerInfo = {
 	peerId: string;
 	url: string;
+	/** Automerge inbox document URL from LAN beacon (v2+), when available. */
+	inboxDocUrl?: string;
 };
 
 export type PubInfo = {

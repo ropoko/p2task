@@ -1,16 +1,26 @@
-import { useDocument, type AutomergeUrl } from '@automerge/react';
-import { useMemo, useState } from 'react';
+import { useDocument, useRepo, type AutomergeUrl } from '@automerge/react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { AppSidebar, type AppRoute } from './components/AppSidebar';
 import { IconSquare } from './components/IconSquare';
+import { InviteToWorkspacesDialog } from './components/InviteToWorkspacesDialog';
+import { ShareDocSync, type ShareDocBundle } from './components/ShareDocSync';
 import { useAppIdentity } from './identity/identityContext';
 import { FocusPage } from './views/FocusPage';
+import { InboxPage } from './views/InboxPage';
 import { MyTasksPage } from './views/MyTasksPage';
 import { PeersPage } from './views/PeersPage';
 import { WorkspaceKanbanPage } from './views/WorkspaceKanbanPage';
 import { WorkspaceNotesPage } from './views/WorkspaceNotesPage';
+import { invitePeerToWorkspaces } from './workspace/invitePeer';
 import { createDefaultWorkspace, type RootDoc } from './workspace/workspaceDoc';
 import {
+	makeLocalWorkspaceKey,
+	makeSharedWorkspaceKey,
+	parseWorkspaceKey
+} from './workspace/workspaceKeys';
+import {
+	acceptedSharesInDoc,
 	backlogTasks,
 	defaultFocusTask,
 	doneColumnId,
@@ -22,47 +32,124 @@ import {
 
 export type AppProps = {
 	workspaceDocumentUrl: AutomergeUrl;
+	inboxDocumentUrl: AutomergeUrl;
 };
 
 type AppView = 'normal' | 'focus';
 
-export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Element {
-	const { publicKeyId: createdByUserId } = useAppIdentity();
-	const [doc, changeDoc] = useDocument<RootDoc>(workspaceDocumentUrl, { suspense: true });
+type SidebarWorkspaceItem = {
+	key: string;
+	name: string;
+};
+
+type InviteDraft = {
+	targetPeerId: string;
+	targetInboxUrl: string;
+	label: string;
+};
+
+export default function App({
+	workspaceDocumentUrl,
+	inboxDocumentUrl
+}: AppProps): React.JSX.Element {
+	const repo = useRepo();
+	const { publicKeyId: createdByUserId, nickname } = useAppIdentity();
+	const [localDoc, changeLocalDoc] = useDocument<RootDoc>(workspaceDocumentUrl, { suspense: true });
+
+	const [shareDocMap, setShareDocMap] = useState(() => new Map<AutomergeUrl, ShareDocBundle>());
+	const onShareUpdate = useCallback((url: AutomergeUrl, bundle: ShareDocBundle) => {
+		setShareDocMap((prev) => {
+			const next = new Map(prev);
+			next.set(url, bundle);
+			return next;
+		});
+	}, []);
+
+	const acceptedShares = acceptedSharesInDoc(localDoc);
+	const distinctShareRootUrls = useMemo(
+		() => [...new Set(acceptedShares.map((s) => s.shareRootUrl))] as AutomergeUrl[],
+		[acceptedShares]
+	);
+
+	const sidebarWorkspaces = useMemo((): SidebarWorkspaceItem[] => {
+		const items: SidebarWorkspaceItem[] = [];
+		for (const w of workspacesInDoc(localDoc)) {
+			items.push({ key: makeLocalWorkspaceKey(w.id), name: w.name });
+		}
+		for (const share of acceptedShares) {
+			const bundle = shareDocMap.get(share.shareRootUrl as AutomergeUrl);
+			if (!bundle) {
+				continue;
+			}
+			const doc = bundle.doc;
+			for (const wid of share.workspaceIds) {
+				const ws = workspacesInDoc(doc).find((x) => x.id === wid);
+				if (ws) {
+					const short =
+						share.fromPeerId.length > 10 ? `${share.fromPeerId.slice(0, 8)}…` : share.fromPeerId;
+					items.push({
+						key: makeSharedWorkspaceKey(share.shareRootUrl, ws.id),
+						name: `${ws.name} (shared · ${short})`
+					});
+				}
+			}
+		}
+		return items;
+	}, [localDoc, acceptedShares, shareDocMap]);
+
+	const [rawWorkspaceKey, setRawWorkspaceKey] = useState<string | null>(null);
+	const resolvedWorkspaceKey = useMemo(() => {
+		if (rawWorkspaceKey && sidebarWorkspaces.some((w) => w.key === rawWorkspaceKey)) {
+			return rawWorkspaceKey;
+		}
+		return sidebarWorkspaces[0]?.key ?? '';
+	}, [rawWorkspaceKey, sidebarWorkspaces]);
+
+	const activeParsed = useMemo(
+		() => parseWorkspaceKey(resolvedWorkspaceKey),
+		[resolvedWorkspaceKey]
+	);
+
+	const { activeDoc, changeActiveDoc } = useMemo(() => {
+		const p = activeParsed;
+		if (!p) {
+			return { activeDoc: localDoc, changeActiveDoc: changeLocalDoc };
+		}
+		if (p.kind === 'local') {
+			return { activeDoc: localDoc, changeActiveDoc: changeLocalDoc };
+		}
+		const bundle = shareDocMap.get(p.shareRootUrl);
+		if (!bundle) {
+			return { activeDoc: localDoc, changeActiveDoc: changeLocalDoc };
+		}
+		return { activeDoc: bundle.doc, changeActiveDoc: bundle.changeDoc };
+	}, [activeParsed, localDoc, changeLocalDoc, shareDocMap]);
+
+	const activeWorkspaceId = activeParsed?.workspaceId ?? '';
+	const activeWorkspace = activeWorkspaceId
+		? getWorkspaceById(activeDoc, activeWorkspaceId)
+		: undefined;
+
 	const [route, setRoute] = useState<AppRoute>('workspace');
 	const [workspaceTab, setWorkspaceTab] = useState<'kanban' | 'notes'>('kanban');
-	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(
-		() => workspacesInDoc(doc)[0]?.id ?? ''
-	);
 	const [view, setView] = useState<AppView>('normal');
 	const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
-
-	const resolvedWorkspaceId = useMemo(() => {
-		if (getWorkspaceById(doc, selectedWorkspaceId)) {
-			return selectedWorkspaceId;
-		}
-		return workspacesInDoc(doc)[0]?.id ?? '';
-	}, [doc, selectedWorkspaceId]);
-
-	const activeWorkspace = getWorkspaceById(doc, resolvedWorkspaceId);
-
-	const goNormal = (): void => setView('normal');
-	const goFocus = (): void => setView('focus');
+	const [inviteDraft, setInviteDraft] = useState<InviteDraft | null>(null);
 
 	const today = useMemo(
-		() => (resolvedWorkspaceId ? todayTasks(doc, resolvedWorkspaceId) : []),
-		[doc, resolvedWorkspaceId]
+		() => (activeWorkspaceId ? todayTasks(activeDoc, activeWorkspaceId) : []),
+		[activeDoc, activeWorkspaceId]
 	);
 	const backlog = useMemo(
-		() => (resolvedWorkspaceId ? backlogTasks(doc, resolvedWorkspaceId) : []),
-		[doc, resolvedWorkspaceId]
+		() => (activeWorkspaceId ? backlogTasks(activeDoc, activeWorkspaceId) : []),
+		[activeDoc, activeWorkspaceId]
 	);
 
 	const resolvedFocus = useMemo(() => {
-		if (!resolvedWorkspaceId) {
+		if (!activeWorkspaceId) {
 			return undefined;
 		}
-		const ws = getWorkspaceById(doc, resolvedWorkspaceId);
+		const ws = getWorkspaceById(activeDoc, activeWorkspaceId);
 		if (!ws) {
 			return undefined;
 		}
@@ -72,23 +159,26 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 				return hit;
 			}
 		}
-		return defaultFocusTask(doc, resolvedWorkspaceId);
-	}, [doc, focusTaskId, resolvedWorkspaceId]);
+		return defaultFocusTask(activeDoc, activeWorkspaceId);
+	}, [activeDoc, activeWorkspaceId, focusTaskId]);
 
 	const focusIndex = resolvedFocus ? today.findIndex((t) => t.id === resolvedFocus.id) + 1 : 0;
 	const focusLabel =
 		today.length > 0 && focusIndex > 0 ? `${focusIndex} of ${today.length} today` : '0 of 0 today';
 
+	const goNormal = (): void => setView('normal');
+	const goFocus = (): void => setView('focus');
+
 	const markFocusTaskDone = (): void => {
-		if (!resolvedFocus || !resolvedWorkspaceId) {
+		if (!resolvedFocus || !activeWorkspaceId) {
 			return;
 		}
-		changeDoc((d) => {
+		changeActiveDoc((d) => {
 			const list = d.workspaces;
 			if (!Array.isArray(list)) {
 				return;
 			}
-			const ws = list.find((w) => w.id === resolvedWorkspaceId);
+			const ws = list.find((w) => w.id === activeWorkspaceId);
 			if (!ws) {
 				return;
 			}
@@ -108,39 +198,82 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 
 	const addWorkspace = (): void => {
 		const nw = createDefaultWorkspace('Untitled');
-		changeDoc((d) => {
+		changeLocalDoc((d) => {
 			if (!Array.isArray(d.workspaces)) {
 				d.workspaces = [nw];
 				return;
 			}
 			d.workspaces.push(nw);
 		});
-		setSelectedWorkspaceId(nw.id);
+		setRawWorkspaceKey(makeLocalWorkspaceKey(nw.id));
 		setRoute('workspace');
 		setWorkspaceTab('kanban');
 	};
 
 	const renameWorkspace = (name: string): void => {
-		if (!resolvedWorkspaceId) {
+		if (!activeWorkspaceId) {
 			return;
 		}
-		changeDoc((d) => {
+		changeActiveDoc((d) => {
 			const list = d.workspaces;
 			if (!Array.isArray(list)) {
 				return;
 			}
-			const w = list.find((x) => x.id === resolvedWorkspaceId);
+			const w = list.find((x) => x.id === activeWorkspaceId);
 			if (w) {
 				w.name = name;
 			}
 		});
 	};
 
+	const workspacePickList = useMemo(
+		() => workspacesInDoc(localDoc).map((w) => ({ id: w.id, name: w.name })),
+		[localDoc]
+	);
+
 	const renderMain = (): React.JSX.Element => {
 		if (route === 'peers') {
 			return (
 				<main className="main">
-					<PeersPage />
+					<PeersPage
+						onInvitePeer={(draft) => {
+							setInviteDraft(draft);
+						}}
+					/>
+					{inviteDraft ? (
+						<InviteToWorkspacesDialog
+							title="Invite to workspaces"
+							subtitle={`Pick one or more workspaces to share with ${inviteDraft.label}. They receive the full root document; selection scopes what appears in their sidebar (MVP).`}
+							workspaces={workspacePickList}
+							onClose={() => {
+								setInviteDraft(null);
+							}}
+							onConfirm={async (workspaceIds) => {
+								await invitePeerToWorkspaces({
+									repo,
+									myPeerId: createdByUserId,
+									myNickname: nickname,
+									myInboxUrl: inboxDocumentUrl,
+									shareRootUrl: workspaceDocumentUrl,
+									targetInboxUrl: inviteDraft.targetInboxUrl as AutomergeUrl,
+									targetPeerId: inviteDraft.targetPeerId,
+									workspaceIds
+								});
+							}}
+						/>
+					) : null}
+				</main>
+			);
+		}
+
+		if (route === 'inbox') {
+			return (
+				<main className="main">
+					<InboxPage
+						inboxDocumentUrl={inboxDocumentUrl}
+						changeLocalRoot={changeLocalDoc}
+						myNickname={nickname}
+					/>
 				</main>
 			);
 		}
@@ -148,7 +281,11 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 		if (!activeWorkspace) {
 			return (
 				<main className="main">
-					<p className="main__empty">No workspace available.</p>
+					<p className="main__empty">
+						{activeParsed?.kind === 'share'
+							? 'Loading shared workspace… (stay online with the host peer.)'
+							: 'No workspace available.'}
+					</p>
 				</main>
 			);
 		}
@@ -168,11 +305,11 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 			);
 		}
 
-		if (route === 'activity' || route === 'inbox') {
+		if (route === 'activity') {
 			return (
 				<main className="main">
 					<header className="main__header">
-						<h1 className="main__title">{route === 'activity' ? 'Activity' : 'Inbox'}</h1>
+						<h1 className="main__title">Activity</h1>
 						<p className="main__subtitle">Filtered by workspace: {activeWorkspace.name}</p>
 					</header>
 					<p className="main__empty">Nothing here yet.</p>
@@ -221,16 +358,16 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 				</header>
 				{workspaceTab === 'kanban' ? (
 					<WorkspaceKanbanPage
-						workspaceId={resolvedWorkspaceId}
-						doc={doc}
-						changeDoc={changeDoc}
+						workspaceId={activeWorkspaceId}
+						doc={activeDoc}
+						changeDoc={changeActiveDoc}
 						createdByUserId={createdByUserId}
 					/>
 				) : (
 					<WorkspaceNotesPage
-						workspaceId={resolvedWorkspaceId}
-						doc={doc}
-						changeDoc={changeDoc}
+						workspaceId={activeWorkspaceId}
+						doc={activeDoc}
+						changeDoc={changeActiveDoc}
 						createdByUserId={createdByUserId}
 					/>
 				)}
@@ -240,13 +377,18 @@ export default function App({ workspaceDocumentUrl }: AppProps): React.JSX.Eleme
 
 	return (
 		<div className="app-root" data-view={view}>
+			{distinctShareRootUrls.map((url) => (
+				<ShareDocSync key={url} url={url} onUpdate={onShareUpdate} />
+			))}
 			<div className="app-chrome" aria-hidden={view === 'focus'}>
 				<div className="app-body">
 					<AppSidebar
-						workspaces={workspacesInDoc(doc)}
-						selectedWorkspaceId={resolvedWorkspaceId}
+						workspaces={sidebarWorkspaces}
+						selectedWorkspaceKey={resolvedWorkspaceKey}
 						route={route}
-						onSelectWorkspace={setSelectedWorkspaceId}
+						onSelectWorkspace={(key) => {
+							setRawWorkspaceKey(key);
+						}}
 						onAddWorkspace={addWorkspace}
 						onNavigate={setRoute}
 					/>

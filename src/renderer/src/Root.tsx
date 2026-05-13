@@ -19,7 +19,13 @@ type BootState =
 	| { phase: 'loading' }
 	| { phase: 'welcome' }
 	| { phase: 'unavailable' }
-	| { phase: 'ready'; workspaceUrl: AutomergeUrl; identity: AppIdentity; repo: Repo };
+	| {
+			phase: 'ready';
+			workspaceUrl: AutomergeUrl;
+			inboxUrl: AutomergeUrl;
+			identity: AppIdentity;
+			repo: Repo;
+	  };
 
 async function awaitRepoPort(channel: string): Promise<MessagePort> {
 	return new Promise<MessagePort>((resolve) => {
@@ -71,7 +77,11 @@ function wrapPortStripTransfers(port: MessagePort): MessagePort {
 	} as unknown as MessagePort;
 }
 
-async function buildRepoAndUrl(): Promise<{ repo: Repo; workspaceUrl: AutomergeUrl }> {
+async function buildRepoAndUrls(): Promise<{
+	repo: Repo;
+	workspaceUrl: AutomergeUrl;
+	inboxUrl: AutomergeUrl;
+}> {
 	const repoApi = window.api?.repo;
 	if (!repoApi) {
 		throw new Error('Main process repo API is unavailable.');
@@ -87,7 +97,11 @@ async function buildRepoAndUrl(): Promise<{ repo: Repo; workspaceUrl: AutomergeU
 	if (!isValidAutomergeUrl(rawUrl)) {
 		throw new Error(`Main process returned an invalid Automerge URL: ${rawUrl}`);
 	}
-	return { repo, workspaceUrl: rawUrl };
+	const rawInbox = await repoApi.getInboxUrl();
+	if (!isValidAutomergeUrl(rawInbox)) {
+		throw new Error(`Main process returned an invalid inbox Automerge URL: ${rawInbox}`);
+	}
+	return { repo, workspaceUrl: rawUrl, inboxUrl: rawInbox };
 }
 
 export function Root(): React.JSX.Element {
@@ -114,13 +128,14 @@ export function Root(): React.JSX.Element {
 					setBoot({ phase: 'welcome' });
 					return;
 				}
-				const { repo, workspaceUrl } = await buildRepoAndUrl();
+				const { repo, workspaceUrl, inboxUrl } = await buildRepoAndUrls();
 				if (cancelled) {
 					return;
 				}
 				setBoot({
 					phase: 'ready',
 					workspaceUrl,
+					inboxUrl,
 					repo,
 					identity: {
 						publicKeyId: status.publicKeyId,
@@ -142,10 +157,11 @@ export function Root(): React.JSX.Element {
 	}, []);
 
 	const handleWelcomeSuccess = async (identity: IdentityPublic): Promise<void> => {
-		const { repo, workspaceUrl } = await buildRepoAndUrl();
+		const { repo, workspaceUrl, inboxUrl } = await buildRepoAndUrls();
 		setBoot({
 			phase: 'ready',
 			workspaceUrl,
+			inboxUrl,
 			repo,
 			identity: { ...identity, isFallback: false }
 		});
@@ -167,7 +183,7 @@ export function Root(): React.JSX.Element {
 		<IdentityProvider value={boot.identity}>
 			<RepoContext.Provider value={boot.repo}>
 				<Suspense fallback={<LoadingRoot />}>
-					<App workspaceDocumentUrl={boot.workspaceUrl} />
+					<App workspaceDocumentUrl={boot.workspaceUrl} inboxDocumentUrl={boot.inboxUrl} />
 				</Suspense>
 			</RepoContext.Provider>
 		</IdentityProvider>

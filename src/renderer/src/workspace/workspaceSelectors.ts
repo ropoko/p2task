@@ -1,7 +1,11 @@
-import type { RootDoc, WorkspaceEntity, WorkspaceTask } from './workspaceDoc';
+import type { AcceptedShare, RootDoc, WorkspaceEntity, WorkspaceTask } from './workspaceDoc';
 
 export function workspacesInDoc(doc: RootDoc): WorkspaceEntity[] {
 	return doc.workspaces ?? [];
+}
+
+export function acceptedSharesInDoc(doc: RootDoc): AcceptedShare[] {
+	return doc.acceptedShares ?? [];
 }
 
 export function getWorkspaceById(doc: RootDoc, workspaceId: string): WorkspaceEntity | undefined {

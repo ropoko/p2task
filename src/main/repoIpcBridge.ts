@@ -3,13 +3,14 @@ import { ipcMain, MessageChannelMain, type MessagePortMain } from 'electron';
 import { MessageChannelNetworkAdapter } from '@automerge/automerge-repo-network-messagechannel';
 
 import {
+	P2TASK_REPO_GET_INBOX_URL,
 	P2TASK_REPO_GET_ROOT_URL,
 	P2TASK_REPO_PORT_CHANNEL,
 	P2TASK_REPO_REQUEST_PORT
 } from '../shared/p2taskIpc';
 import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 import { bootRepoIfReady, getRepo, isRepoReady } from './repo';
-import { getOrCreateRootDocUrl } from './workspaceBootstrap';
+import { getOrCreateInboxDocUrl, getOrCreateRootDocUrl } from './workspaceBootstrap';
 
 /**
  * Adapts Electron's MessagePortMain (Node EventEmitter style: `.on`/`.off`)
@@ -122,5 +123,13 @@ export function registerRepoIpcBridge(): void {
 			throw new Error('Repo is not ready. Identity must be created first.');
 		}
 		return getOrCreateRootDocUrl(repo);
+	});
+
+	ipcMain.handle(P2TASK_REPO_GET_INBOX_URL, async () => {
+		const repo = bootRepoIfReady();
+		if (!repo) {
+			throw new Error('Repo is not ready. Identity must be created first.');
+		}
+		return getOrCreateInboxDocUrl(repo);
 	});
 }

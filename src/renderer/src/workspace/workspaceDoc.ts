@@ -7,6 +7,7 @@ export {
 } from '../../../shared/workspaceSchema';
 
 export type {
+	AcceptedShare,
 	KanbanColumn,
 	KanbanColumnRole,
 	NoteEntry,
@@ -16,3 +17,11 @@ export type {
 	WorkspaceNotes,
 	WorkspaceTask
 } from '../../../shared/workspaceSchema';
+
+export type {
+	InboxDoc,
+	InboxReceivedInvite,
+	InboxSentInvite,
+	InviteStatus
+} from '../../../shared/inboxSchema';
+export { createInitialInboxDoc } from '../../../shared/inboxSchema';

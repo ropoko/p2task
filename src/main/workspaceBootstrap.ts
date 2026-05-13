@@ -3,6 +3,7 @@ import { join } from 'path';
 
 import { isValidAutomergeUrl, type AutomergeUrl, type Repo } from '@automerge/automerge-repo';
 
+import { createInitialInboxDoc, type InboxDoc } from '../shared/inboxSchema';
 import { createInitialRootDoc, type RootDoc } from '../shared/workspaceSchema';
 import { p2taskDir } from './identityPaths';
 
@@ -10,6 +11,7 @@ const WORKSPACE_FILE = 'workspace.json';
 
 type WorkspaceConfig = {
 	rootDocUrl: string;
+	inboxDocUrl?: string;
 };
 
 function workspaceConfigPath(): string {
@@ -31,7 +33,12 @@ function readWorkspaceConfig(): WorkspaceConfig | null {
 		) {
 			return null;
 		}
-		return { rootDocUrl: (parsed as WorkspaceConfig).rootDocUrl };
+		const p = parsed as WorkspaceConfig;
+		const out: WorkspaceConfig = { rootDocUrl: p.rootDocUrl };
+		if (typeof p.inboxDocUrl === 'string') {
+			out.inboxDocUrl = p.inboxDocUrl;
+		}
+		return out;
 	} catch {
 		return null;
 	}
@@ -68,6 +75,39 @@ export async function getOrCreateRootDocUrl(repo: Repo): Promise<AutomergeUrl> {
 	const handle = repo.create<RootDoc>(createInitialRootDoc());
 	await handle.whenReady();
 	const url = handle.url;
-	writeWorkspaceConfig({ rootDocUrl: url });
+	const prev = readWorkspaceConfig();
+	writeWorkspaceConfig({
+		rootDocUrl: url,
+		...(prev?.inboxDocUrl ? { inboxDocUrl: prev.inboxDocUrl } : {})
+	});
 	return url;
+}
+
+/**
+ * Returns the persisted inbox doc URL, creating one on first use / migration.
+ * Depends on a valid root doc URL already being on disk (call after getOrCreateRootDocUrl).
+ */
+export async function getOrCreateInboxDocUrl(repo: Repo): Promise<AutomergeUrl> {
+	await getOrCreateRootDocUrl(repo);
+	const config = readWorkspaceConfig();
+	if (!config) {
+		throw new Error('workspace.json missing after root bootstrap');
+	}
+	if (config.inboxDocUrl && isValidAutomergeUrl(config.inboxDocUrl)) {
+		try {
+			const handle = await repo.find<InboxDoc>(config.inboxDocUrl);
+			await handle.whenReady();
+			if (!handle.isUnavailable()) {
+				return config.inboxDocUrl;
+			}
+		} catch {
+			// Fall through and create a fresh inbox doc below.
+		}
+	}
+
+	const handle = repo.create<InboxDoc>(createInitialInboxDoc());
+	await handle.whenReady();
+	const inboxUrl = handle.url;
+	writeWorkspaceConfig({ ...config, inboxDocUrl: inboxUrl });
+	return inboxUrl;
 }

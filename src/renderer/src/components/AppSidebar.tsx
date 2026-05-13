@@ -3,15 +3,19 @@ import { useState } from 'react';
 import { ProfileSettingsDialog } from './ProfileSettingsDialog';
 import { IconSquare } from './IconSquare';
 import { useAppIdentity } from '../identity/identityContext';
-import type { WorkspaceEntity } from '../workspace/workspaceDoc';
 
 export type AppRoute = 'workspace' | 'myTasks' | 'activity' | 'inbox' | 'peers';
 
+type SidebarWorkspaceItem = {
+	key: string;
+	name: string;
+};
+
 type AppSidebarProps = {
-	workspaces: WorkspaceEntity[];
-	selectedWorkspaceId: string;
+	workspaces: SidebarWorkspaceItem[];
+	selectedWorkspaceKey: string;
 	route: AppRoute;
-	onSelectWorkspace: (id: string) => void;
+	onSelectWorkspace: (key: string) => void;
 	onAddWorkspace: () => void;
 	onNavigate: (route: AppRoute) => void;
 };
@@ -30,7 +34,7 @@ function initialsFromNickname(nickname: string): string {
 
 export function AppSidebar({
 	workspaces,
-	selectedWorkspaceId,
+	selectedWorkspaceKey,
 	route,
 	onSelectWorkspace,
 	onAddWorkspace,
@@ -88,12 +92,12 @@ export function AppSidebar({
 				<label className="sidebar__label">Workspaces</label>
 				{workspaces.map((w) => (
 					<button
-						key={w.id}
+						key={w.key}
 						type="button"
 						className="sidebar__link"
-						data-active={route === 'workspace' && w.id === selectedWorkspaceId ? 'true' : 'false'}
+						data-active={route === 'workspace' && w.key === selectedWorkspaceKey ? 'true' : 'false'}
 						onClick={() => {
-							onSelectWorkspace(w.id);
+							onSelectWorkspace(w.key);
 							onNavigate('workspace');
 						}}
 					>

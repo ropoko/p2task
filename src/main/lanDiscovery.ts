@@ -1,6 +1,7 @@
 import dgram from 'node:dgram';
 import os from 'node:os';
 
+import { isValidAutomergeUrl } from '@automerge/automerge-repo';
 import { WebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 
 import { resolveLanDiscoveryUdpPort } from './lanDiscoveryPort';
@@ -13,18 +14,22 @@ const ANNOUNCE_INTERVAL_MS = 3000;
 /** Drop a peer after this long without a beacon (multiple of announce interval) */
 const STALE_INTERVAL_MULT = 3;
 
-const BEACON_VERSION = 1;
+const BEACON_VERSION_SEND = 2;
+/** Accept beacons from older clients without inbox fields. */
+const BEACON_VERSION_MIN_INBOUND = 1;
 const BROADCAST_ADDR = '255.255.255.255';
 
 type BeaconPayload = {
 	v?: unknown;
 	peerId?: unknown;
 	wsPort?: unknown;
+	inboxDocUrl?: unknown;
 };
 
 type Discovered = {
 	peerId: string;
 	url: string;
+	inboxDocUrl?: string;
 	adapter: WebSocketClientAdapter | null;
 	lastSeen: number;
 };
@@ -32,6 +37,12 @@ type Discovered = {
 let socket: dgram.Socket | null = null;
 let announceTimer: ReturnType<typeof setInterval> | null = null;
 const discoveredPeers = new Map<string, Discovered>();
+let localBeaconInboxDocUrl: string | null = null;
+
+/** Called after workspace inbox URL is known (e.g. from network boot). */
+export function setLanBeaconInboxDocUrl(url: string | null): void {
+	localBeaconInboxDocUrl = url && isValidAutomergeUrl(url) ? url : null;
+}
 
 function isIpv4Family(family: os.NetworkInterfaceInfo['family']): boolean {
 	return family === 'IPv4' || (family as unknown as number) === 4;
@@ -113,7 +124,8 @@ function removeDiscoveredPeer(peerId: string): void {
 }
 
 function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
-	if (payload.v !== BEACON_VERSION) {
+	const v = payload.v;
+	if (v !== BEACON_VERSION_MIN_INBOUND && v !== BEACON_VERSION_SEND) {
 		return;
 	}
 	if (typeof payload.peerId !== 'string' || payload.peerId.length === 0) {
@@ -130,6 +142,10 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 		return;
 	}
 
+	const inboxRaw = payload.inboxDocUrl;
+	const inboxDocUrl =
+		typeof inboxRaw === 'string' && isValidAutomergeUrl(inboxRaw) ? inboxRaw : undefined;
+
 	const repo = getRepo();
 	const localPeerId = repo.peerId;
 	const remotePeerId = payload.peerId;
@@ -144,6 +160,9 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 	if (existing) {
 		existing.lastSeen = now;
 		existing.url = url;
+		if (inboxDocUrl) {
+			existing.inboxDocUrl = inboxDocUrl;
+		}
 		return;
 	}
 
@@ -151,6 +170,7 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 		discoveredPeers.set(remotePeerId, {
 			peerId: remotePeerId,
 			url,
+			...(inboxDocUrl ? { inboxDocUrl } : {}),
 			adapter: null,
 			lastSeen: now
 		});
@@ -164,6 +184,7 @@ function handleInboundBeacon(senderIp: string, payload: BeaconPayload): void {
 	discoveredPeers.set(remotePeerId, {
 		peerId: remotePeerId,
 		url,
+		...(inboxDocUrl ? { inboxDocUrl } : {}),
 		adapter,
 		lastSeen: now
 	});
@@ -188,13 +209,22 @@ function sendBeacon(discoveryPort: number): void {
 		return;
 	}
 	const host = pickPrimaryLanIPv4();
-	const body: { v: number; peerId: string; wsPort: number; host?: string } = {
-		v: BEACON_VERSION,
+	const body: {
+		v: number;
+		peerId: string;
+		wsPort: number;
+		host?: string;
+		inboxDocUrl?: string;
+	} = {
+		v: BEACON_VERSION_SEND,
 		peerId: repo.peerId,
 		wsPort
 	};
 	if (host) {
 		body.host = host;
+	}
+	if (localBeaconInboxDocUrl) {
+		body.inboxDocUrl = localBeaconInboxDocUrl;
 	}
 	const buf = Buffer.from(JSON.stringify(body), 'utf8');
 	socket.send(buf, discoveryPort, BROADCAST_ADDR, (err) => {
@@ -268,8 +298,16 @@ export function startLanDiscovery(): void {
 	});
 }
 
-export function getLanDiscoveredPeers(): Array<{ peerId: string; url: string }> {
-	return Array.from(discoveredPeers.values()).map(({ peerId, url }) => ({ peerId, url }));
+export function getLanDiscoveredPeers(): Array<{
+	peerId: string;
+	url: string;
+	inboxDocUrl?: string;
+}> {
+	return Array.from(discoveredPeers.values()).map(({ peerId, url, inboxDocUrl }) => ({
+		peerId,
+		url,
+		...(inboxDocUrl ? { inboxDocUrl } : {})
+	}));
 }
 
 export function stopLanDiscovery(): void {

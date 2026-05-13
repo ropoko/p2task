@@ -1,7 +1,8 @@
-import { startLanDiscovery, stopLanDiscovery } from './lanDiscovery';
+import { setLanBeaconInboxDocUrl, startLanDiscovery, stopLanDiscovery } from './lanDiscovery';
 import { startLanServer, stopLanServer } from './lanServer';
 import { startPubClients, stopPubClients } from './pubClients';
 import { bootRepoIfReady } from './repo';
+import { getOrCreateInboxDocUrl } from './workspaceBootstrap';
 
 let started = false;
 let lastNetworkBootError: string | null = null;
@@ -26,6 +27,8 @@ export async function bootNetworkIfReady(): Promise<void> {
 	lastNetworkBootError = null;
 	try {
 		await startLanServer();
+		const inboxUrl = await getOrCreateInboxDocUrl(repo);
+		setLanBeaconInboxDocUrl(inboxUrl);
 		startLanDiscovery();
 		startPubClients();
 		started = true;

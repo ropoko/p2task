@@ -13,6 +13,7 @@ export type P2taskApi = {
 	repo: {
 		requestPort(): Promise<void>;
 		getRootUrl(): Promise<string>;
+		getInboxUrl(): Promise<string>;
 		portChannel: string;
 	};
 

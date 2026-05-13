@@ -44,9 +44,19 @@ export type WorkspaceEntity = {
 	notes: WorkspaceNotes;
 };
 
+/** Accepted workspace share from another peer (MVP: full root doc URL + scoped workspace IDs). */
+export type AcceptedShare = {
+	id: string;
+	shareRootUrl: string;
+	workspaceIds: string[];
+	fromPeerId: string;
+	acceptedAt: string;
+};
+
 /** Root Automerge document: all workspaces in one doc. */
 export type RootDoc = {
 	workspaces: WorkspaceEntity[];
+	acceptedShares?: AcceptedShare[];
 };
 
 /** Until app identity is wired into task creation; used as a default created_by. */
@@ -77,6 +87,7 @@ export function createDefaultWorkspace(name: string): WorkspaceEntity {
 
 export function createInitialRootDoc(): RootDoc {
 	return {
-		workspaces: [createDefaultWorkspace('My workspace')]
+		workspaces: [createDefaultWorkspace('My workspace')],
+		acceptedShares: []
 	};
 }

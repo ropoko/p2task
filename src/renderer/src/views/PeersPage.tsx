@@ -6,6 +6,16 @@ import type { ConnectedPeerInfo, NetworkStatus } from '../../../shared/networkTy
 
 const POLL_INTERVAL_MS = 2000;
 
+export type InvitePeerDraft = {
+	targetPeerId: string;
+	targetInboxUrl: string;
+	label: string;
+};
+
+type PeersPageProps = {
+	onInvitePeer: (draft: InvitePeerDraft) => void;
+};
+
 function shortId(id: string): string {
 	if (!id) {
 		return '—';
@@ -32,9 +42,10 @@ type LoadState =
 	| { kind: 'ready'; status: NetworkStatus; updatedAt: Date }
 	| { kind: 'error'; message: string };
 
-export function PeersPage(): React.JSX.Element {
+export function PeersPage({ onInvitePeer }: PeersPageProps): React.JSX.Element {
 	const identity = useAppIdentity();
 	const [state, setState] = useState<LoadState>({ kind: 'loading' });
+	const [notice, setNotice] = useState<string | null>(null);
 
 	const fetchStatus = useCallback(async (): Promise<void> => {
 		const api = window.api?.network;
@@ -75,6 +86,16 @@ export function PeersPage(): React.JSX.Element {
 
 	const status = state.kind === 'ready' ? state.status : null;
 
+	const inboxByPeerId = useMemo(() => {
+		const m = new Map<string, string>();
+		for (const p of status?.lanPeers ?? []) {
+			if (p.inboxDocUrl) {
+				m.set(p.peerId, p.inboxDocUrl);
+			}
+		}
+		return m;
+	}, [status]);
+
 	const connectedLanPeers = useMemo(() => {
 		if (!status) {
 			return [] as ConnectedPeerInfo[];
@@ -105,6 +126,18 @@ export function PeersPage(): React.JSX.Element {
 	const lanPort = status?.lanPort ?? null;
 	const networkError = status?.networkError ?? null;
 
+	const tryInvite = (peerId: string, label: string): void => {
+		const inboxUrl = inboxByPeerId.get(peerId);
+		if (!inboxUrl) {
+			setNotice(
+				'No inbox URL for this peer yet. Wait for LAN discovery (v2 beacon), or the peer may be on an older build.'
+			);
+			return;
+		}
+		setNotice(null);
+		onInvitePeer({ targetPeerId: peerId, targetInboxUrl: inboxUrl, label });
+	};
+
 	return (
 		<>
 			<header className="main__header">
@@ -133,6 +166,12 @@ export function PeersPage(): React.JSX.Element {
 					</button>
 				</div>
 			</header>
+
+			{notice ? (
+				<p className="main__empty peers-device__error" role="status">
+					{notice}
+				</p>
+			) : null}
 
 			<section className="task-section" aria-labelledby="peers-device-heading">
 				<h2 className="task-section__label" id="peers-device-heading">
@@ -174,40 +213,94 @@ export function PeersPage(): React.JSX.Element {
 				<h2 className="task-section__label" id="peers-local-heading">
 					Local (LAN)
 				</h2>
+				<p className="main__subtitle" style={{ marginBottom: '0.75rem' }}>
+					Click a peer to invite them to one or more workspaces (requires inbox from LAN beacon).
+				</p>
 				{!status ? (
 					<p className="main__empty">—</p>
 				) : connectedLanPeers.length === 0 && pendingLanPeers.length === 0 ? (
 					<p className="main__empty">No peers discovered on this network yet.</p>
 				) : (
 					<div className="task-list">
-						{connectedLanPeers.map((peer) => (
-							<article key={connectedPeerKey(peer)} className="task-card">
-								<span className="peers-card__dot" data-status="on" aria-hidden />
-								<div className="task-card__body">
-									<h3 className="task-card__title" title={peer.peerId}>
-										{shortId(peer.peerId)}
-									</h3>
-									<p className="task-card__meta">
-										{peer.transport === 'lan-out' && peer.via
-											? peer.via
-											: 'incoming LAN connection'}
-									</p>
-								</div>
-								<span className="task-card__badge task-card__badge--progress">connected</span>
-							</article>
-						))}
-						{pendingLanPeers.map((peer) => (
-							<article key={peer.peerId} className="task-card">
-								<span className="peers-card__dot" data-status="off" aria-hidden />
-								<div className="task-card__body">
-									<h3 className="task-card__title" title={peer.peerId}>
-										{shortId(peer.peerId)}
-									</h3>
-									<p className="task-card__meta">{peer.url}</p>
-								</div>
-								<span className="task-card__badge task-card__badge--todo">pending</span>
-							</article>
-						))}
+						{connectedLanPeers.map((peer) => {
+							const hasInbox = inboxByPeerId.has(peer.peerId);
+							return (
+								<article
+									key={connectedPeerKey(peer)}
+									className={`task-card${hasInbox ? ' task-card--clickable' : ''}`}
+									role={hasInbox ? 'button' : undefined}
+									tabIndex={hasInbox ? 0 : undefined}
+									onClick={
+										hasInbox
+											? () => {
+													tryInvite(peer.peerId, shortId(peer.peerId));
+												}
+											: undefined
+									}
+									onKeyDown={
+										hasInbox
+											? (e) => {
+													if (e.key === 'Enter' || e.key === ' ') {
+														e.preventDefault();
+														tryInvite(peer.peerId, shortId(peer.peerId));
+													}
+												}
+											: undefined
+									}
+								>
+									<span className="peers-card__dot" data-status="on" aria-hidden />
+									<div className="task-card__body">
+										<h3 className="task-card__title" title={peer.peerId}>
+											{shortId(peer.peerId)}
+										</h3>
+										<p className="task-card__meta">
+											{peer.transport === 'lan-out' && peer.via
+												? peer.via
+												: 'incoming LAN connection'}
+											{hasInbox ? '' : ' · inbox URL unknown'}
+										</p>
+									</div>
+									<span className="task-card__badge task-card__badge--progress">connected</span>
+								</article>
+							);
+						})}
+						{pendingLanPeers.map((peer) => {
+							const hasInbox = inboxByPeerId.has(peer.peerId);
+							return (
+								<article
+									key={peer.peerId}
+									className={`task-card${hasInbox ? ' task-card--clickable' : ''}`}
+									role={hasInbox ? 'button' : undefined}
+									tabIndex={hasInbox ? 0 : undefined}
+									onClick={
+										hasInbox
+											? () => {
+													tryInvite(peer.peerId, shortId(peer.peerId));
+												}
+											: undefined
+									}
+									onKeyDown={
+										hasInbox
+											? (e) => {
+													if (e.key === 'Enter' || e.key === ' ') {
+														e.preventDefault();
+														tryInvite(peer.peerId, shortId(peer.peerId));
+													}
+												}
+											: undefined
+									}
+								>
+									<span className="peers-card__dot" data-status="off" aria-hidden />
+									<div className="task-card__body">
+										<h3 className="task-card__title" title={peer.peerId}>
+											{shortId(peer.peerId)}
+										</h3>
+										<p className="task-card__meta">{peer.url}</p>
+									</div>
+									<span className="task-card__badge task-card__badge--todo">pending</span>
+								</article>
+							);
+						})}
 					</div>
 				)}
 			</section>
@@ -246,20 +339,46 @@ export function PeersPage(): React.JSX.Element {
 				)}
 				{status && pubPeers.length > 0 ? (
 					<div className="task-list peers-list--nested">
-						{pubPeers.map((peer) => (
-							<article key={connectedPeerKey(peer)} className="task-card">
-								<span className="peers-card__dot" data-status="on" aria-hidden />
-								<div className="task-card__body">
-									<h3 className="task-card__title" title={peer.peerId}>
-										{shortId(peer.peerId)}
-									</h3>
-									<p className="task-card__meta">
-										{peer.via ? `reached via ${peer.via}` : 'reached via pub'}
-									</p>
-								</div>
-								<span className="task-card__badge task-card__badge--progress">connected</span>
-							</article>
-						))}
+						{pubPeers.map((peer) => {
+							const hasInbox = inboxByPeerId.has(peer.peerId);
+							return (
+								<article
+									key={connectedPeerKey(peer)}
+									className={`task-card${hasInbox ? ' task-card--clickable' : ''}`}
+									role={hasInbox ? 'button' : undefined}
+									tabIndex={hasInbox ? 0 : undefined}
+									onClick={
+										hasInbox
+											? () => {
+													tryInvite(peer.peerId, shortId(peer.peerId));
+												}
+											: undefined
+									}
+									onKeyDown={
+										hasInbox
+											? (e) => {
+													if (e.key === 'Enter' || e.key === ' ') {
+														e.preventDefault();
+														tryInvite(peer.peerId, shortId(peer.peerId));
+													}
+												}
+											: undefined
+									}
+								>
+									<span className="peers-card__dot" data-status="on" aria-hidden />
+									<div className="task-card__body">
+										<h3 className="task-card__title" title={peer.peerId}>
+											{shortId(peer.peerId)}
+										</h3>
+										<p className="task-card__meta">
+											{peer.via ? `reached via ${peer.via}` : 'reached via pub'}
+											{hasInbox ? '' : ' · inbox URL unknown (LAN only today)'}
+										</p>
+									</div>
+									<span className="task-card__badge task-card__badge--progress">connected</span>
+								</article>
+							);
+						})}
 					</div>
 				) : null}
 			</section>
