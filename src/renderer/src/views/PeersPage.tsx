@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { IconSquare } from '../components/IconSquare';
 import { useAppIdentity } from '../identity/identityContext';
-import type { NetworkStatus } from '../../../shared/networkTypes';
+import type { ConnectedPeerInfo, NetworkStatus } from '../../../shared/networkTypes';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -23,6 +23,10 @@ function formatTime(date: Date): string {
 	return `${hh}:${mm}:${ss}`;
 }
 
+function connectedPeerKey(peer: ConnectedPeerInfo): string {
+	return `${peer.transport}:${peer.via ?? ''}:${peer.peerId}`;
+}
+
 type LoadState =
 	| { kind: 'loading' }
 	| { kind: 'ready'; status: NetworkStatus; updatedAt: Date }
@@ -34,6 +38,7 @@ export function PeersPage(): React.JSX.Element {
 
 	const fetchStatus = useCallback(async (): Promise<void> => {
 		const api = window.api?.network;
+
 		if (!api) {
 			setState({
 				kind: 'error',
@@ -41,6 +46,7 @@ export function PeersPage(): React.JSX.Element {
 			});
 			return;
 		}
+
 		try {
 			const status = await api.getStatus();
 			setState({ kind: 'ready', status, updatedAt: new Date() });
@@ -56,9 +62,11 @@ export function PeersPage(): React.JSX.Element {
 		const initial = window.setTimeout(() => {
 			void fetchStatus();
 		}, 0);
+
 		const handle = window.setInterval(() => {
 			void fetchStatus();
 		}, POLL_INTERVAL_MS);
+
 		return () => {
 			window.clearTimeout(initial);
 			window.clearInterval(handle);
@@ -67,25 +75,31 @@ export function PeersPage(): React.JSX.Element {
 
 	const status = state.kind === 'ready' ? state.status : null;
 
-	const localPeerIdSet = useMemo(() => {
+	const connectedLanPeers = useMemo(() => {
 		if (!status) {
-			return new Set<string>();
+			return [] as ConnectedPeerInfo[];
 		}
-		return new Set(status.lanPeers.map((p) => p.peerId));
+		return status.connectedPeers.filter(
+			(peer) => peer.transport === 'lan-in' || peer.transport === 'lan-out'
+		);
 	}, [status]);
 
-	const remotePeerIds = useMemo(() => {
-		if (!status) {
-			return [] as string[];
-		}
-		return status.connectedPeerIds.filter((id) => !localPeerIdSet.has(id));
-	}, [status, localPeerIdSet]);
+	const connectedLanPeerIds = useMemo(() => {
+		return new Set(connectedLanPeers.map((peer) => peer.peerId));
+	}, [connectedLanPeers]);
 
-	const connectedSet = useMemo(() => {
+	const pendingLanPeers = useMemo(() => {
 		if (!status) {
-			return new Set<string>();
+			return [];
 		}
-		return new Set(status.connectedPeerIds);
+		return status.lanPeers.filter((peer) => !connectedLanPeerIds.has(peer.peerId));
+	}, [status, connectedLanPeerIds]);
+
+	const pubPeers = useMemo(() => {
+		if (!status) {
+			return [] as ConnectedPeerInfo[];
+		}
+		return status.connectedPeers.filter((peer) => peer.transport === 'pub');
 	}, [status]);
 
 	const lanPort = status?.lanPort ?? null;
@@ -153,35 +167,38 @@ export function PeersPage(): React.JSX.Element {
 				</h2>
 				{!status ? (
 					<p className="main__empty">—</p>
-				) : status.lanPeers.length === 0 ? (
+				) : connectedLanPeers.length === 0 && pendingLanPeers.length === 0 ? (
 					<p className="main__empty">No peers discovered on this network yet.</p>
 				) : (
 					<div className="task-list">
-						{status.lanPeers.map((peer) => {
-							const connected = connectedSet.has(peer.peerId);
-							return (
-								<article key={peer.peerId} className="task-card">
-									<span
-										className="peers-card__dot"
-										data-status={connected ? 'on' : 'off'}
-										aria-hidden
-									/>
-									<div className="task-card__body">
-										<h3 className="task-card__title" title={peer.peerId}>
-											{shortId(peer.peerId)}
-										</h3>
-										<p className="task-card__meta">{peer.url}</p>
-									</div>
-									<span
-										className={`task-card__badge task-card__badge--${
-											connected ? 'progress' : 'todo'
-										}`}
-									>
-										{connected ? 'connected' : 'pending'}
-									</span>
-								</article>
-							);
-						})}
+						{connectedLanPeers.map((peer) => (
+							<article key={connectedPeerKey(peer)} className="task-card">
+								<span className="peers-card__dot" data-status="on" aria-hidden />
+								<div className="task-card__body">
+									<h3 className="task-card__title" title={peer.peerId}>
+										{shortId(peer.peerId)}
+									</h3>
+									<p className="task-card__meta">
+										{peer.transport === 'lan-out' && peer.via
+											? peer.via
+											: 'incoming LAN connection'}
+									</p>
+								</div>
+								<span className="task-card__badge task-card__badge--progress">connected</span>
+							</article>
+						))}
+						{pendingLanPeers.map((peer) => (
+							<article key={peer.peerId} className="task-card">
+								<span className="peers-card__dot" data-status="off" aria-hidden />
+								<div className="task-card__body">
+									<h3 className="task-card__title" title={peer.peerId}>
+										{shortId(peer.peerId)}
+									</h3>
+									<p className="task-card__meta">{peer.url}</p>
+								</div>
+								<span className="task-card__badge task-card__badge--todo">pending</span>
+							</article>
+						))}
 					</div>
 				)}
 			</section>
@@ -218,16 +235,18 @@ export function PeersPage(): React.JSX.Element {
 						))}
 					</div>
 				)}
-				{status && remotePeerIds.length > 0 ? (
+				{status && pubPeers.length > 0 ? (
 					<div className="task-list peers-list--nested">
-						{remotePeerIds.map((peerId) => (
-							<article key={peerId} className="task-card">
+						{pubPeers.map((peer) => (
+							<article key={connectedPeerKey(peer)} className="task-card">
 								<span className="peers-card__dot" data-status="on" aria-hidden />
 								<div className="task-card__body">
-									<h3 className="task-card__title" title={peerId}>
-										{shortId(peerId)}
+									<h3 className="task-card__title" title={peer.peerId}>
+										{shortId(peer.peerId)}
 									</h3>
-									<p className="task-card__meta">reached via pub</p>
+									<p className="task-card__meta">
+										{peer.via ? `reached via ${peer.via}` : 'reached via pub'}
+									</p>
 								</div>
 								<span className="task-card__badge task-card__badge--progress">connected</span>
 							</article>

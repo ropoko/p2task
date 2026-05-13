@@ -7,6 +7,7 @@ import {
 	P2TASK_REPO_PORT_CHANNEL,
 	P2TASK_REPO_REQUEST_PORT
 } from '../shared/p2taskIpc';
+import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 import { bootRepoIfReady, getRepo, isRepoReady } from './repo';
 import { getOrCreateRootDocUrl } from './workspaceBootstrap';
 
@@ -76,6 +77,7 @@ function tearDownBridgesFor(wcid: number): void {
 	}
 	const repo = getRepo();
 	for (const bridge of list) {
+		untrackAdapterPeers(bridge.adapter);
 		try {
 			repo.networkSubsystem.removeNetworkAdapter(bridge.adapter);
 		} catch {
@@ -101,6 +103,7 @@ export function registerRepoIpcBridge(): void {
 		const adapter = new MessageChannelNetworkAdapter(shim as unknown as MessagePort, {
 			useWeakRef: false
 		});
+		trackAdapterPeers(adapter, 'ipc', `renderer:${event.sender.id}`);
 		repo.networkSubsystem.addNetworkAdapter(adapter);
 
 		event.sender.postMessage(P2TASK_REPO_PORT_CHANNEL, null, [port2]);

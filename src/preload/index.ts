@@ -34,6 +34,7 @@ const api = {
 			return ipcRenderer.invoke(P2TASK_IDENTITY_UPDATE_PROFILE, payload);
 		}
 	},
+
 	repo: {
 		/**
 		 * Ask the main process to create a MessageChannel and transfer one
@@ -49,6 +50,7 @@ const api = {
 		},
 		portChannel: P2TASK_REPO_PORT_CHANNEL
 	},
+
 	network: {
 		getStatus(): Promise<NetworkStatus> {
 			return ipcRenderer.invoke(P2TASK_NETWORK_GET_STATUS);

@@ -2,6 +2,7 @@ import { WebSocketClientAdapter } from '@automerge/automerge-repo-network-websoc
 
 import { getConfiguredPubUrls } from './pubConfig';
 import { getRepo } from './repo';
+import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 
 type PubClient = {
 	url: string;
@@ -22,6 +23,7 @@ export function startPubClients(): void {
 			continue;
 		}
 		const adapter = new WebSocketClientAdapter(url);
+		trackAdapterPeers(adapter, 'pub', url);
 		repo.networkSubsystem.addNetworkAdapter(adapter);
 		clientsByUrl.set(url, { url, adapter });
 	}
@@ -46,6 +48,7 @@ export function stopPubClients(): void {
 	}
 	const repo = getRepo();
 	for (const { adapter } of clientsByUrl.values()) {
+		untrackAdapterPeers(adapter);
 		try {
 			repo.networkSubsystem.removeNetworkAdapter(adapter);
 		} catch {

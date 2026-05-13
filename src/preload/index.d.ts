@@ -9,11 +9,13 @@ export type P2taskApi = {
 		create(payload: { nickname: string; email: string }): Promise<IdentityPublic>;
 		updateProfile(payload: { nickname: string; email: string }): Promise<IdentityPublic>;
 	};
+
 	repo: {
 		requestPort(): Promise<void>;
 		getRootUrl(): Promise<string>;
 		portChannel: string;
 	};
+
 	network: {
 		getStatus(): Promise<NetworkStatus>;
 	};

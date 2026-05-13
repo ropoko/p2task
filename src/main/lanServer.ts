@@ -4,6 +4,7 @@ import { WebSocketServerAdapter } from '@automerge/automerge-repo-network-websoc
 import WebSocket from 'isomorphic-ws';
 
 import { getRepo } from './repo';
+import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 
 const WebSocketServer = WebSocket.WebSocketServer;
 type WebSocketServer = InstanceType<typeof WebSocket.WebSocketServer>;
@@ -45,6 +46,7 @@ export async function startLanServer(): Promise<LanServer> {
 	const port = address.port;
 
 	const adapter = new WebSocketServerAdapter(wss);
+	trackAdapterPeers(adapter, 'lan-in');
 	repo.networkSubsystem.addNetworkAdapter(adapter);
 
 	lanServer = { wss, adapter, port };
@@ -59,7 +61,8 @@ export function stopLanServer(): void {
 	if (!lanServer) {
 		return;
 	}
-	const { wss } = lanServer;
+	const { adapter, wss } = lanServer;
+	untrackAdapterPeers(adapter);
 	try {
 		wss.close();
 	} catch {

@@ -3,6 +3,7 @@ import { Bonjour, type Browser, type Service } from 'bonjour-service';
 
 import { getRepo } from './repo';
 import { getLanServerPort } from './lanServer';
+import { trackAdapterPeers, untrackAdapterPeers } from './peerTransports';
 
 const SERVICE_TYPE = 'p2task';
 const PROTOCOL = 'tcp';
@@ -61,6 +62,7 @@ function handleServiceUp(service: Service): void {
 
 	const url = `ws://${host}:${service.port}`;
 	const adapter = new WebSocketClientAdapter(url);
+	trackAdapterPeers(adapter, 'lan-out', url);
 	repo.networkSubsystem.addNetworkAdapter(adapter);
 
 	discoveredPeers.set(remotePeerId, { peerId: remotePeerId, url, adapter });
@@ -137,6 +139,20 @@ export function stopLanDiscovery(): void {
 			// Best-effort shutdown.
 		}
 		bonjour = null;
+	}
+	const repo = getRepo();
+	for (const { adapter } of discoveredPeers.values()) {
+		untrackAdapterPeers(adapter);
+		try {
+			repo.networkSubsystem.removeNetworkAdapter(adapter);
+		} catch {
+			// Best-effort shutdown.
+		}
+		try {
+			adapter.disconnect();
+		} catch {
+			// Best-effort shutdown.
+		}
 	}
 	discoveredPeers.clear();
 }
